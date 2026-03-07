@@ -159,14 +159,7 @@ const AppContent: React.FC<{ passthrough: unknown }> = observer(({ passthrough }
         if (is_client_store_initialized) initHotjar(store.client);
     }, [store.client, is_client_store_initialized]);
 
-    // intentionally switch the user with wallets to light mode and EN language
-    React.useLayoutEffect(() => {
-        if (has_wallet) {
-            if (is_dark_mode_on) {
-                setDarkMode(false);
-            }
-        }
-    }, [has_wallet, current_language, changeSelectedLanguage, is_dark_mode_on, setDarkMode]);
+    // Note: Dark mode preference is preserved for all users including wallet holders
 
     const isCallBackPage = window.location.pathname.includes('callback');
 

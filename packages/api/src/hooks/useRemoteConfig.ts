@@ -12,7 +12,19 @@ const remoteConfigQuery = async function () {
     if (!response.ok) {
         throw new Error('Remote Config Server is out of reach!');
     }
-    return response.json();
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+        return response.json();
+    }
+
+    // If it's not JSON, parse as text and try to catch error, but return empty object to prevent app crash
+    try {
+        const text = await response.text();
+        return JSON.parse(text);
+    } catch {
+        return {};
+    }
 };
 
 function useRemoteConfig(enabled = false) {
