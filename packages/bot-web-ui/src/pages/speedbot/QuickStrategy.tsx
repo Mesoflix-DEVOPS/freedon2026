@@ -53,70 +53,43 @@ const QuickStrategy = observer(() => {
     const subscriptionId = useRef<string | null>(null);
     const currentlySubscribedSymbolRef = useRef<string | null>(null);
 
-    // Sync ref with state
-    useEffect(() => {
-        // Update digit counts and stats whenever tickHistory changes
-        if (tickHistory.length > 0) {
-            const counts = new Array(10).fill(0);
-            let rise = 0;
-            let fall = 0;
+    const fetchSymbols = useCallback(async () => {
+        if (!api_base.api) return;
+        const res = await api_base.api.send({
+            active_symbols: "brief",
+            product_type: "basic",
+        });
 
-            tickHistory.forEach((tick: { quote: number }, i: number) => {
-                const quote = tick.quote;
-                const digit = parseInt(quote.toFixed(pipSize).slice(-1));
-                counts[digit]++;
+        if (res.active_symbols) {
+            const volSymbols = res.active_symbols.filter(
+                (s: SymbolData) => s.subgroup === "synthetics" &&
+                    (s.market === "synthetic_index" || s.market === "volatility_indices")
+            );
 
-                if (i > 0) {
-                    if (quote > tickHistory[i - 1].quote) rise++;
-                    else if (quote < tickHistory[i - 1].quote) fall++;
-                }
+            const volatilityGroup: SymbolData[] = [];
+            const jumpGroup: SymbolData[] = [];
+            const otherGroup: SymbolData[] = [];
+
+            volSymbols.forEach((symbol: SymbolData) => {
+                const name = symbol.display_name.toLowerCase();
+                if (name.includes("jump")) jumpGroup.push(symbol);
+                else if (name.includes("volatility") || name.includes("vol") || symbol.market === "volatility_indices") volatilityGroup.push(symbol);
+                else otherGroup.push(symbol);
             });
 
-            setDigitCounts(counts);
-            setRiseFallStats({ rise, fall });
-
-            const latest = tickHistory[tickHistory.length - 1];
-            setCurrentPrice(latest.quote);
-            setLastDigit(parseInt(latest.quote.toFixed(pipSize).slice(-1)));
+            setGroupedSymbols({
+                volatility: volatilityGroup,
+                jump: jumpGroup,
+                other: otherGroup,
+            });
+            setSymbolsList(volSymbols);
         }
-    }, [tickHistory, pipSize]);
+    }, []);
 
-    // Fetch Symbols
+    // Fetch Symbols on mount
     useEffect(() => {
-        const fetchSymbols = async () => {
-            if (!api_base.api) return;
-            const res = await api_base.api.send({
-                active_symbols: "brief",
-                product_type: "basic",
-            });
-
-            if (res.active_symbols) {
-                const volSymbols = res.active_symbols.filter(
-                    (s: SymbolData) => s.subgroup === "synthetics" &&
-                        (s.market === "synthetic_index" || s.market === "volatility_indices")
-                );
-
-                const volatilityGroup: SymbolData[] = [];
-                const jumpGroup: SymbolData[] = [];
-                const otherGroup: SymbolData[] = [];
-
-                volSymbols.forEach((symbol: SymbolData) => {
-                    const name = symbol.display_name.toLowerCase();
-                    if (name.includes("jump")) jumpGroup.push(symbol);
-                    else if (name.includes("volatility") || name.includes("vol") || symbol.market === "volatility_indices") volatilityGroup.push(symbol);
-                    else otherGroup.push(symbol);
-                });
-
-                setGroupedSymbols({
-                    volatility: volatilityGroup,
-                    jump: jumpGroup,
-                    other: otherGroup,
-                });
-                setSymbolsList(volSymbols);
-            }
-        };
         fetchSymbols();
-    }, [client.is_logged_in]);
+    }, [fetchSymbols]);
 
     const requestTickHistory = useCallback(async (symbol: string) => {
         if (!api_base.api) return;
@@ -124,6 +97,7 @@ const QuickStrategy = observer(() => {
         // Forget previous
         if (subscriptionId.current) {
             await api_base.api.send({ forget: subscriptionId.current });
+            subscriptionId.current = null; // Clear after forgetting
         }
 
         const res = await api_base.api.send({
@@ -170,11 +144,9 @@ const QuickStrategy = observer(() => {
         };
     }, [fetchSymbols, requestTickHistory, selectedMarket]);
 
-    // Effect for subscription and real-time updates
+    // Effect for real-time updates (onMessage)
     useEffect(() => {
         if (!api_base.api) return;
-
-        requestTickHistory(selectedMarket);
 
         const messageSub = api_base.api.onMessage().subscribe(({ data }: { data: any }) => {
             if (data.msg_type === 'tick' && data.tick.symbol === selectedMarket) {
@@ -189,11 +161,36 @@ const QuickStrategy = observer(() => {
 
         return () => {
             if (messageSub) messageSub.unsubscribe();
-            if (subscriptionId.current && api_base.api) {
-                api_base.api.send({ forget: subscriptionId.current });
-            }
         };
-    }, [selectedMarket, requestTickHistory, client.is_logged_in]); // Added client.is_logged_in as a dependency to retry when login status changes
+    }, [selectedMarket]);
+
+    // Sync ref with state
+    useEffect(() => {
+        // Update digit counts and stats whenever tickHistory changes
+        if (tickHistory.length > 0) {
+            const counts = new Array(10).fill(0);
+            let rise = 0;
+            let fall = 0;
+
+            tickHistory.forEach((tick: { quote: number }, i: number) => {
+                const quote = tick.quote;
+                const digit = parseInt(quote.toFixed(pipSize).slice(-1));
+                counts[digit]++;
+
+                if (i > 0) {
+                    if (quote > tickHistory[i - 1].quote) rise++;
+                    else if (quote < tickHistory[i - 1].quote) fall++;
+                }
+            });
+
+            setDigitCounts(counts);
+            setRiseFallStats({ rise, fall });
+
+            const latest = tickHistory[tickHistory.length - 1];
+            setCurrentPrice(latest.quote);
+            setLastDigit(parseInt(latest.quote.toFixed(pipSize).slice(-1)));
+        }
+    }, [tickHistory, pipSize]);
 
     const handleMarketChange = (newSymbol: string) => {
         setSelectedMarket(newSymbol);
