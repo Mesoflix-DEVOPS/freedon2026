@@ -28,73 +28,61 @@ export interface TradeResult {
 
 class TradingLogic {
     private is_running = false;
-    private flash_limit = 5;
     private flash_interval: NodeJS.Timeout | null = null;
-
-    setFlashLimit(limit: number) {
-        this.flash_limit = limit;
-    }
 
     async placeTrade(params: TradeParams): Promise<any> {
         if (!api_base.api) throw new Error('API not initialized');
 
+        // Clean up parameters - avoid sending 'prediction' if it's undefined or not allowed
+        const cleanedParams: any = { ...params };
+        if (cleanedParams.prediction === undefined || cleanedParams.prediction === null) {
+            delete cleanedParams.prediction;
+        }
+
+        // Special case: Rise/Fall (CALL/PUT) does not accept prediction
+        if (cleanedParams.contract_type === 'CALL' || cleanedParams.contract_type === 'PUT') {
+            delete cleanedParams.prediction;
+        }
+
         const proposal_req = {
             proposal: 1,
             subscribe: 0,
-            ...params,
+            ...cleanedParams,
         };
 
         try {
             // 1. Get Proposal
             const proposal_res = await api_base.api.send(proposal_req);
-            if (proposal_res.error) throw proposal_res.error;
+            if (proposal_res.error) {
+                console.error('[TradeLogic] Proposal error:', proposal_res.error);
+                throw proposal_res.error;
+            }
 
             const { id, ask_price } = proposal_res.proposal;
 
             // 2. Buy
             const buy_res = await api_base.api.send({ buy: id, price: ask_price });
-            if (buy_res.error) throw buy_res.error;
+            if (buy_res.error) {
+                console.error('[TradeLogic] Buy error:', buy_res.error);
+                throw buy_res.error;
+            }
 
             return buy_res.buy;
         } catch (error) {
-            console.error('Trade placement failed:', error);
+            console.error('[TradeLogic] Trade placement failed:', error);
             throw error;
         }
     }
 
     async placeBulkTrades(params: TradeParams, quantity: number): Promise<any[]> {
+        console.log(`[TradeLogic] Executing bulk trades: ${quantity}`);
         const trades = Array.from({ length: quantity }, () => this.placeTrade(params));
         return Promise.all(trades);
     }
 
-    startFlashTrades(params: TradeParams, limit: number, onTradePlaced: (res: any) => void) {
-        if (this.is_running) return;
-        this.is_running = true;
-        let count = 0;
-
-        this.flash_interval = setInterval(async () => {
-            if (count >= limit || !this.is_running) {
-                this.stopFlashTrades();
-                return;
-            }
-
-            try {
-                const res = await this.placeTrade(params);
-                onTradePlaced(res);
-                count++;
-            } catch (error) {
-                console.error('Flash trade failed:', error);
-            }
-        }, 1000);
-    }
-
-    stopFlashTrades() {
-        this.is_running = false;
-        if (this.flash_interval) {
-            clearInterval(this.flash_interval);
-            this.flash_interval = null;
-        }
-    }
+    // Flash mode will now be handled via tick updates in QuickStrategy to be "Real-time"
+    // So we don't need startFlashTrades here anymore, or we can repurpose it.
+    // The user wants it to trade EVERY TICK.
 }
 
 export const trading_logic = new TradingLogic();

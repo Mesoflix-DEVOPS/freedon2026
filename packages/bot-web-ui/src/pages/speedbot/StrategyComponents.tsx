@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Text, Input, Button, Icon, SelectNative } from '@deriv/components';
 import { Localize } from '@deriv/translations';
 import { observer } from 'mobx-react-lite';
-import { MdHistory, MdSettings, MdTrendingUp } from 'react-icons/md';
-import { FaBolt, FaLayerGroup } from 'react-icons/fa';
+import { MdSettings, MdTrendingUp, MdHistory } from 'react-icons/md';
+import { FaBolt, FaLayerGroup, FaChevronUp, FaChevronDown } from 'react-icons/fa';
 import { formatMoney } from '@deriv/shared';
 
 // Digit Analysis Component (Inspired by Dcircles)
@@ -144,94 +144,232 @@ export const ConfigurationPanel = observer(({
     setMode,
     stopLoss,
     setStopLoss,
+    takeProfit,
+    setTakeProfit,
+    runsBeforeCountdown,
+    setRunsBeforeCountdown,
+    countdownTime,
+    setCountdownTime,
     flashLimit,
     setFlashLimit,
+    bulkCount,
+    setBulkCount,
     is_running,
     onRun,
-    onStop
+    onStop,
+    isOpen,
+    onToggle,
+    copierToken,
+    setCopierToken,
+    isCopying,
+    onStartCopying,
+    onStopCopying,
+    copierAssets,
+    setCopierAssets,
+    copierMaxStake,
+    setCopierMaxStake,
+    copierMinStake,
+    setCopierMinStake,
+    copierTradeTypes,
+    setCopierTradeTypes
 }: any) => {
     return (
-        <div className="qs-config-panel">
-            <div className="qs-config-section">
-                <div className="qs-config-item">
-                    <Text size="xs" weight="bold" family="outfit" color="less-prominent">
-                        <Localize i18n_default_text="STAKE (USD)" />
+        <div className={`qs-config-panel ${isOpen ? 'open' : 'closed'}`}>
+            <div className="qs-config-header" onClick={onToggle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <MdSettings style={{ fontSize: '20px', color: 'var(--primary-color)' }} />
+                    <Text size="s" weight="bold" family="outfit">
+                        <Localize i18n_default_text="CONFIGURATION" />
                     </Text>
-                    <Input
-                        className="dc-input"
-                        type="number"
-                        value={stake}
-                        onChange={(e: any) => setStake(e.target.value)}
-                        disabled={is_running}
-                    />
                 </div>
-                <div className="qs-config-item">
-                    <Text size="xs" weight="bold" family="outfit" color="less-prominent">
-                        <Localize i18n_default_text="MODE" />
-                    </Text>
-                    <div className="qs-mode-selector">
-                        <button
-                            className={`qs-mode-btn ${mode === 'Normal' ? 'active' : ''}`}
-                            onClick={() => setMode('Normal')}
-                            disabled={is_running}
-                        >
-                            <Localize i18n_default_text="Normal" />
-                        </button>
-                        <button
-                            className={`qs-mode-btn ${mode === 'Bulk' ? 'active' : ''}`}
-                            onClick={() => setMode('Bulk')}
-                            disabled={is_running}
-                        >
-                            <FaLayerGroup /> <Localize i18n_default_text="Bulk" />
-                        </button>
-                        <button
-                            className={`qs-mode-btn ${mode === 'Flash' ? 'active' : ''}`}
-                            onClick={() => setMode('Flash')}
-                            disabled={is_running}
-                        >
-                            <FaBolt /> <Localize i18n_default_text="Flash" />
-                        </button>
-                    </div>
-                </div>
-                {mode === 'Flash' && (
-                    <div className="qs-config-item">
-                        <Text size="xs" weight="bold" family="outfit" color="less-prominent">
-                            <Localize i18n_default_text="FLASH LIMIT" />
-                        </Text>
-                        <Input
-                            className="dc-input"
-                            type="number"
-                            value={flashLimit}
-                            onChange={(e: any) => setFlashLimit(e.target.value)}
-                            disabled={is_running}
-                        />
-                    </div>
-                )}
-                <div className="qs-config-item">
-                    <Text size="xs" weight="bold" family="outfit" color="less-prominent">
-                        <Localize i18n_default_text="STOP LOSS" />
-                    </Text>
-                    <Input
-                        className="dc-input"
-                        type="number"
-                        value={stopLoss}
-                        onChange={(e: any) => setStopLoss(e.target.value)}
-                        disabled={is_running}
-                    />
-                </div>
+                {isOpen ? <FaChevronUp /> : <FaChevronDown />}
             </div>
 
-            <div className="qs-action-buttons">
-                {!is_running ? (
-                    <button className="qs-run-btn" onClick={onRun}>
-                        <Localize i18n_default_text="RUN STRATEGY" />
-                    </button>
-                ) : (
-                    <button className="qs-stop-btn" onClick={onStop}>
-                        <Localize i18n_default_text="STOP STRATEGY" />
-                    </button>
-                )}
-            </div>
+            {isOpen && (
+                <div className="qs-config-content">
+                    <div className="qs-config-section">
+                        {/* Trading Mode */}
+                        <div className="qs-config-item">
+                            <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                <Localize i18n_default_text="TRADING MODE" />
+                            </Text>
+                            <select
+                                className="qs-mode-select"
+                                value={mode}
+                                onChange={(e) => setMode(e.target.value)}
+                            >
+                                <option value="Normal">Normal Mode</option>
+                                <option value="Bulk">Bulk Mode</option>
+                                <option value="Flash">Flash Mode (Real-time)</option>
+                            </select>
+                        </div>
+
+                        {/* Mode Specific Settings */}
+                        {mode === 'Bulk' && (
+                            <div className="qs-config-item">
+                                <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                    <Localize i18n_default_text="BULK TRADES COUNT" />
+                                </Text>
+                                <Input
+                                    className="dc-input"
+                                    type="number"
+                                    value={bulkCount}
+                                    onChange={(e: any) => setBulkCount(e.target.value)}
+                                />
+                            </div>
+                        )}
+
+                        <div className="qs-config-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                            <div className="qs-config-item">
+                                <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                    <Localize i18n_default_text="STAKE" />
+                                </Text>
+                                <Input
+                                    className="dc-input"
+                                    type="number"
+                                    value={stake}
+                                    onChange={(e: any) => setStake(e.target.value)}
+                                />
+                            </div>
+                            <div className="qs-config-item">
+                                <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                    <Localize i18n_default_text="STOP LOSS" />
+                                </Text>
+                                <Input
+                                    className="dc-input"
+                                    type="number"
+                                    value={stopLoss}
+                                    onChange={(e: any) => setStopLoss(e.target.value)}
+                                />
+                            </div>
+                            <div className="qs-config-item">
+                                <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                    <Localize i18n_default_text="TAKE PROFIT" />
+                                </Text>
+                                <Input
+                                    className="dc-input"
+                                    type="number"
+                                    value={takeProfit}
+                                    onChange={(e: any) => setTakeProfit(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="qs-config-divider" />
+
+                        {/* Automation Settings */}
+                        <div className="qs-config-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                            <div className="qs-config-item">
+                                <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                    <Localize i18n_default_text="RUNS BEFORE COUNTDOWN" />
+                                </Text>
+                                <Input
+                                    className="dc-input"
+                                    type="number"
+                                    value={runsBeforeCountdown}
+                                    onChange={(e: any) => setRunsBeforeCountdown(e.target.value)}
+                                />
+                            </div>
+                            <div className="qs-config-item">
+                                <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                    <Localize i18n_default_text="COUNTDOWN (SEC)" />
+                                </Text>
+                                <select
+                                    className="qs-mode-select"
+                                    value={countdownTime}
+                                    onChange={(e: any) => setCountdownTime(Number(e.target.value))}
+                                >
+                                    <option value={30}>30 Seconds</option>
+                                    <option value={60}>1 Minute</option>
+                                    <option value={120}>2 Minutes</option>
+                                    <option value={300}>5 Minutes</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Copy Trading Section */}
+                        <div className="qs-config-divider" />
+
+                        <Text size="s" weight="bold" family="outfit" color="prominent">
+                            <Localize i18n_default_text="COPYTRADING (API)" />
+                        </Text>
+
+                        <div className="qs-config-item">
+                            <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                <Localize i18n_default_text="COPIER API TOKEN" />
+                            </Text>
+                            <Input
+                                className="dc-input"
+                                type="password"
+                                value={copierToken}
+                                onChange={(e: any) => setCopierToken(e.target.value)}
+                                placeholder="Enter Copier API Token"
+                            />
+                        </div>
+
+                        <div className="qs-config-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                            <div className="qs-config-item">
+                                <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                    <Localize i18n_default_text="MAX STAKE" />
+                                </Text>
+                                <Input
+                                    className="dc-input"
+                                    type="number"
+                                    value={copierMaxStake}
+                                    onChange={(e: any) => setCopierMaxStake(e.target.value)}
+                                />
+                            </div>
+                            <div className="qs-config-item">
+                                <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                    <Localize i18n_default_text="MIN STAKE" />
+                                </Text>
+                                <Input
+                                    className="dc-input"
+                                    type="number"
+                                    value={copierMinStake}
+                                    onChange={(e: any) => setCopierMinStake(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="qs-config-item">
+                            <Text size="xs" weight="bold" family="outfit" color="less-prominent">
+                                <Localize i18n_default_text="ASSETS (COMMA SEPARATED)" />
+                            </Text>
+                            <Input
+                                className="dc-input"
+                                value={copierAssets}
+                                onChange={(e: any) => setCopierAssets(e.target.value)}
+                                placeholder="e.g. R_10,R_50,R_100"
+                            />
+                        </div>
+
+                        <div className="qs-action-buttons" style={{ marginTop: '10px' }}>
+                            {!isCopying ? (
+                                <button className="qs-copy-btn" onClick={onStartCopying}>
+                                    <Localize i18n_default_text="START COPYING" />
+                                </button>
+                            ) : (
+                                <button className="qs-stop-copy-btn" onClick={onStopCopying}>
+                                    <Localize i18n_default_text="STOP COPYING" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="qs-action-buttons main-action" style={{ marginTop: '20px' }}>
+                        {!is_running ? (
+                            <button className="qs-run-btn" onClick={onRun}>
+                                <Localize i18n_default_text="RUN STRATEGY" />
+                            </button>
+                        ) : (
+                            <button className="qs-stop-btn" onClick={onStop}>
+                                <Localize i18n_default_text="STOP STRATEGY" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 });
