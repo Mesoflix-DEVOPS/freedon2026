@@ -74,32 +74,66 @@ const QuickStrategy = observer(() => {
         }
     }, []);
 
-    const requestTickHistory = useCallback(async (symbol: string) => {
+    const requestTickHistory = useCallback(async (symbol: string, currentPipSize: number = 2) => {
         if (subscriptionId.current) {
             try { await api_base.api.send({ forget: subscriptionId.current }); } catch (e) { }
             subscriptionId.current = null;
         }
 
         try {
+            console.log(`[QuickStrategy] Requesting tick history for ${symbol} (Pip: ${currentPipSize})`);
             const response = await api_base.api.send({
                 ticks_history: symbol,
                 subscribe: 1,
                 end: 'latest',
-                count: 50,
+                count: 1000,
                 adjust_start_time: 1,
             });
 
             if (response.subscription) {
                 subscriptionId.current = response.subscription.id;
             }
+
             if (response.history) {
-                setTickHistory(response.history.prices.map((p: any, i: number) => ({
+                const prices = response.history.prices;
+                const times = response.history.times;
+                const historyData = prices.map((p: any, i: number) => ({
                     price: p,
-                    epoch: response.history.times[i]
-                })));
+                    epoch: times[i]
+                }));
+
+                setTickHistory(historyData);
+
+                // Populate initial stats from history
+                const counts = new Array(10).fill(0);
+                let rise = 0;
+                let fall = 0;
+
+                prices.forEach((p: any, i: number) => {
+                    const priceStr = Number(p).toFixed(currentPipSize);
+                    const digit = Number(priceStr.charAt(priceStr.length - 1));
+                    if (!isNaN(digit)) counts[digit]++;
+
+                    if (i > 0) {
+                        if (p > prices[i - 1]) rise++;
+                        else if (p < prices[i - 1]) fall++;
+                    }
+                });
+
+                setDigitCounts(counts);
+                setRiseFallStats({ rise, fall });
+
+                // Set initial price to stop loading state
+                if (prices.length > 0) {
+                    const lastPrice = Number(prices[prices.length - 1]);
+                    setCurrentPrice(lastPrice);
+                    const priceStr = lastPrice.toFixed(currentPipSize);
+                    setLastDigit(Number(priceStr.charAt(priceStr.length - 1)));
+                    lastTickRef.current = { quote: lastPrice, symbol };
+                }
             }
         } catch (err) {
-            console.error('Tick history failed:', err);
+            console.error('[QuickStrategy] Tick history failed:', err);
         }
     }, []);
 
@@ -119,7 +153,12 @@ const QuickStrategy = observer(() => {
 
     useEffect(() => {
         if (selectedMarket) {
-            requestTickHistory(selectedMarket);
+            // Find pip size for this market from symbolsList
+            const market = symbolsList.find(s => s.symbol === selectedMarket);
+            const currentPipSize = market ? Math.max(0, Math.abs(Math.log10(market.pip || 0.01))) : 2;
+            setPipSize(currentPipSize);
+
+            requestTickHistory(selectedMarket, currentPipSize);
         }
         return () => {
             if (subscriptionId.current) {
@@ -136,9 +175,11 @@ const QuickStrategy = observer(() => {
                     const tick = data.tick;
                     const newPrice = Number(tick.quote);
                     setCurrentPrice(newPrice);
-                    setPipSize(tick.pip_size || 2);
 
-                    const quoteStr = tick.quote.toString();
+                    const QuotePipSize = tick.pip_size || pipSize || 2;
+                    setPipSize(QuotePipSize);
+
+                    const quoteStr = newPrice.toFixed(QuotePipSize);
                     const lastDigitDigit = Number(quoteStr.charAt(quoteStr.length - 1));
                     setLastDigit(lastDigitDigit);
 
@@ -376,19 +417,10 @@ const QuickStrategy = observer(() => {
                         setBulkCount={setBulkCount}
                         isOpen={isConfigOpen}
                         onToggle={() => setIsConfigOpen(!isConfigOpen)}
+                        isRunning={isRunning}
+                        onRun={handleRun}
+                        onStop={handleStop}
                     />
-
-                    <div className="qs-action-buttons main-action" style={{ marginTop: '0' }}>
-                        {!isRunning ? (
-                            <button className="qs-run-btn" onClick={handleRun}>
-                                <Localize i18n_default_text="RUN STRATEGY" />
-                            </button>
-                        ) : (
-                            <button className="qs-stop-btn" onClick={handleStop}>
-                                <Localize i18n_default_text="STOP STRATEGY" />
-                            </button>
-                        )}
-                    </div>
                 </div>
 
                 <TransactionTable trades={trades} />

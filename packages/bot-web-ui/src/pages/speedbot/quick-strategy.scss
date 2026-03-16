@@ -260,10 +260,10 @@ html {
                     border: 1px solid var(--glass-border);
                     color: #ffffff;
                     border-radius: 12px;
-                    padding: 12px 16px;
+                    padding: 8px 12px;
                     font-weight: 600;
                     width: 100%;
-                    font-size: 15px;
+                    font-size: 13px;
                     transition: 0.3s;
 
                     &:focus {
@@ -343,6 +343,12 @@ html {
                     color: #06090f;
                     box-shadow: 0 8px 20px rgba(0, 255, 163, 0.3);
 
+                    &.prominent {
+                        height: 56px;
+                        font-size: 16px;
+                        border: 2px solid rgba(255, 255, 255, 0.2);
+                    }
+
                     &:hover {
                         transform: translateY(-2px);
                         box-shadow: 0 12px 28px rgba(0, 255, 163, 0.4);
@@ -354,11 +360,36 @@ html {
                     color: #fff;
                     box-shadow: 0 8px 20px rgba(255, 77, 77, 0.3);
 
+                    &.prominent {
+                        height: 56px;
+                        font-size: 16px;
+                        border: 2px solid rgba(255, 255, 255, 0.2);
+                    }
+
                     &:hover {
                         transform: translateY(-2px);
                         box-shadow: 0 12px 28px rgba(255, 77, 77, 0.4);
                     }
                 }
+            }
+        }
+
+        .qs-config-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-top: 20px;
+            border-top: 1px solid var(--glass-border);
+
+            button {
+                width: 100%;
+                border-radius: 16px;
+                cursor: pointer;
+                transition: all 0.3s;
+                border: none;
+                text-transform: uppercase;
+                font-weight: 800;
+                letter-spacing: 1px;
             }
         }
 

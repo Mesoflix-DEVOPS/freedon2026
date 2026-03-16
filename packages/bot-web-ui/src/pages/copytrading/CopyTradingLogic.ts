@@ -45,9 +45,10 @@ class CopyTradingLogic {
             this.is_copying = true;
             this.is_paused = false;
             return { data: response.copy_start };
-        } catch (err) {
-            console.error('[CopyTrading] Start exception full detail:', err);
-            return { error: err };
+        } catch (err: any) {
+            const errorDetails = err?.error || err;
+            console.error('[CopyTrading] Start exception full detail:', JSON.stringify(errorDetails, null, 2));
+            return { error: errorDetails };
         }
     }
 

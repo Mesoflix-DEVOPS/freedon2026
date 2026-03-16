@@ -153,7 +153,10 @@ export const ConfigurationPanel = observer(({
     bulkCount,
     setBulkCount,
     isOpen,
-    onToggle
+    onToggle,
+    isRunning,
+    onRun,
+    onStop
 }: any) => {
     return (
         <div className={`qs-config-panel ${isOpen ? 'open' : 'closed'}`}>
@@ -165,6 +168,19 @@ export const ConfigurationPanel = observer(({
                     </Text>
                 </div>
                 {isOpen ? <FaChevronUp /> : <FaChevronDown />}
+            </div>
+
+            {/* Run/Stop Buttons - Always visible inside the box header area */}
+            <div className="qs-config-actions-top" style={{ padding: '0 24px 12px' }}>
+                {!isRunning ? (
+                    <button className="qs-run-btn prominent" onClick={onRun}>
+                        <Localize i18n_default_text="RUN STRATEGY" />
+                    </button>
+                ) : (
+                    <button className="qs-stop-btn prominent" onClick={onStop}>
+                        <Localize i18n_default_text="STOP STRATEGY" />
+                    </button>
+                )}
             </div>
 
             {isOpen && (
