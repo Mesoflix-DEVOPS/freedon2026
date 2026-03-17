@@ -126,6 +126,27 @@ class CopyTradingLogic {
         }
     }
 
+    async enableCopyingForToken(token: string, profileData: any = {}) {
+        const tempApi = api_base.generateDerivApiInstance();
+        try {
+            await tempApi.authorize(token);
+            const request = {
+                set_settings: 1,
+                allow_copiers: 1,
+                ...profileData
+            };
+            const response = await tempApi.send(request);
+            if (response.error) {
+                return { error: response.error };
+            }
+            return { data: response.set_settings };
+        } catch (err: any) {
+            return { error: err?.error || err };
+        } finally {
+            tempApi.disconnect();
+        }
+    }
+
     async startCopying(trader_login_id: string, options: {
         assets?: string[];
         max_trade_stake?: number;

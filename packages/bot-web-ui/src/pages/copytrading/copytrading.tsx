@@ -19,6 +19,7 @@ const TokenManager: React.FC = observer(() => {
     const [isTraderEnabled, setIsTraderEnabled] = useState(false);
     const [traderSettings, setTraderSettings] = useState<any>(null);
     const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+    const [traderToken, setTraderToken] = useState('');
 
     // Advanced features
     const [maxStake, setMaxStake] = useState(100);
@@ -196,10 +197,13 @@ const TokenManager: React.FC = observer(() => {
     };
 
     const handleBecomeTrader = async () => {
-        if (!client.is_logged_in) {
-            setToast({ type: 'err', text: 'Please login to Deriv first' });
+        const t = traderToken.trim();
+        if (!t) {
+            setToast({ type: 'err', text: 'Please enter a Trader Token' });
             return;
         }
+
+        setToast({ type: 'ok', text: 'Verifying token & updating settings...' });
 
         const profileData = {
             account_opening_reason: traderSettings?.account_opening_reason || 'Speculative',
@@ -212,15 +216,22 @@ const TokenManager: React.FC = observer(() => {
             tax_residence: traderSettings?.tax_residence || 'hk',
         };
 
-        const res = await copy_trading_logic.becomeTrader(profileData);
+        const res = await copy_trading_logic.enableCopyingForToken(t, profileData);
         if (res.error) {
-            setToast({ type: 'err', text: `Failed to enable: ${res.error.message || 'Unknown error'}` });
+            setToast({ type: 'err', text: `Failed: ${res.error.message || 'Unknown error'}` });
         } else {
             setIsTraderEnabled(true);
-            setToast({ type: 'ok', text: 'Trader mode enabled! You can now share your trades.' });
-            // Refresh settings
-            const refresh = await copy_trading_logic.getAccountSettings();
-            if (refresh.data) setTraderSettings(refresh.data);
+            setToast({ type: 'ok', text: 'SUCCESS! Copy-trading is now ALLOWED on this account.' });
+            setTraderToken('');
+
+            // If the current account matches the token account, refresh settings
+            if (client.is_logged_in) {
+                const refresh = await copy_trading_logic.getAccountSettings();
+                if (refresh.data) {
+                    setIsTraderEnabled(!!refresh.data.allow_copiers);
+                    setTraderSettings(refresh.data);
+                }
+            }
         }
     };
 
@@ -293,7 +304,7 @@ const TokenManager: React.FC = observer(() => {
                 </button>
             </div>
 
-            {activeTab === 'copier' ? (
+            {activeTab === 'copier' && (
                 <>
 
                     {/* Token Input Section */}
@@ -554,7 +565,82 @@ const TokenManager: React.FC = observer(() => {
                         </div>
                     </div>
                 </>
-            ) : null}
+            )}
+
+            {activeTab === 'trader' && (
+                <div style={{
+                    backgroundColor: 'white',
+                    borderRadius: '12px',
+                    padding: isMobile ? '20px' : '24px',
+                    boxSizing: 'border-box' as const,
+                    boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+                    animation: 'slideInRight 0.3s ease'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+                        <FaChartLine style={{ color: '#0a1aadff', fontSize: '24px' }} />
+                        <h3 style={{ margin: 0, fontSize: '20px', color: '#333' }}>Become a Strategy Provider</h3>
+                    </div>
+
+                    <div style={{
+                        padding: '20px',
+                        backgroundColor: isTraderEnabled ? '#e8f5e9' : '#fff3e0',
+                        borderRadius: '12px',
+                        border: `1px solid ${isTraderEnabled ? '#c8e6c9' : '#ffe0b2'}`,
+                        textAlign: 'center',
+                        marginBottom: '20px'
+                    }}>
+                        <p style={{ fontSize: '16px', fontWeight: '700', color: isTraderEnabled ? '#2e7d32' : '#ef6c00', margin: '0 0 10px 0' }}>
+                            Status: {isTraderEnabled ? 'COPING ALLOWED' : 'COPYING DISABLED'}
+                        </p>
+                        <p style={{ fontSize: '14px', color: '#666', margin: '0' }}>
+                            {isTraderEnabled
+                                ? 'Your account is currently open for copiers. Others can follow your trades using your API token.'
+                                : 'You must enable "Allow Copiers" to let others follow your trades and fix "TraderDoesNotAllowCopyTrading" errors.'}
+                        </p>
+                    </div>
+
+                    <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Enter Trader API Token to Enable:</label>
+                        <input
+                            type="password"
+                            placeholder="Enter the API token to enable as Trader"
+                            className="qs-input"
+                            value={traderToken}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTraderToken(e.target.value)}
+                        />
+                        <button
+                            onClick={handleBecomeTrader}
+                            style={{
+                                width: '100%',
+                                backgroundColor: '#4CAF50',
+                                color: 'white',
+                                border: 'none',
+                                padding: '16px',
+                                borderRadius: '10px',
+                                fontWeight: '700',
+                                fontSize: '16px',
+                                cursor: 'pointer',
+                                boxShadow: '0 4px 14px rgba(76, 175, 80, 0.4)',
+                                transition: 'all 0.3s',
+                                opacity: !traderToken ? 0.6 : 1,
+                            }}
+                            disabled={!traderToken}
+                        >
+                            Verify & Enable "Allow Copiers"
+                        </button>
+                    </div>
+
+                    <div style={{ marginTop: '25px', padding: '15px', backgroundColor: '#f5f5f5', borderRadius: '8px', fontSize: '14px' }}>
+                        <p style={{ fontWeight: '700', marginBottom: '10px' }}>Simplified Instructions:</p>
+                        <ol style={{ paddingLeft: '20px', margin: 0, lineHeight: '1.6' }}>
+                            <li>Create a <strong>Read-Only</strong> API token on Deriv for the account you want to use as Trader.</li>
+                            <li>Paste that token in the box above.</li>
+                            <li>Click <strong>"Verify & Enable"</strong> to upgrade your account settings automatically.</li>
+                            <li>Once upgraded correctly, you will see a success notification.</li>
+                        </ol>
+                    </div>
+                </div>
+            )}
 
             {/* Toast Notification */}
             {toast && (
