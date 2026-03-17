@@ -20,6 +20,7 @@ const TokenManager: React.FC = observer(() => {
     const [traderSettings, setTraderSettings] = useState<any>(null);
     const [isLoadingSettings, setIsLoadingSettings] = useState(false);
     const [traderToken, setTraderToken] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
 
     // Advanced features
     const [maxStake, setMaxStake] = useState(100);
@@ -71,7 +72,7 @@ const TokenManager: React.FC = observer(() => {
     // Auto-dismiss toast after 3 seconds
     useEffect(() => {
         if (toast) {
-            const timer = setTimeout(() => setToast(null), 3000);
+            const timer = setTimeout(() => setToast(null), toast.type === 'err' ? 10000 : 4000);
             return () => clearTimeout(timer);
         }
     }, [toast]);
@@ -198,6 +199,7 @@ const TokenManager: React.FC = observer(() => {
 
     const handleBecomeTrader = async (useToken = false) => {
         let res;
+        setIsProcessing(true);
         const profileData = {
             account_opening_reason: traderSettings?.account_opening_reason || 'Speculative',
             address_city: traderSettings?.address_city || 'Update Required',
@@ -209,38 +211,50 @@ const TokenManager: React.FC = observer(() => {
             tax_residence: traderSettings?.tax_residence || 'hk',
         };
 
-        if (useToken) {
-            const t = traderToken.trim();
-            if (!t) {
-                setToast({ type: 'err', text: 'Please enter a Trader Token' });
-                return;
+        try {
+            if (useToken) {
+                const t = traderToken.trim();
+                if (!t) {
+                    setToast({ type: 'err', text: 'Please enter a Trader Token' });
+                    setIsProcessing(false);
+                    return;
+                }
+                setToast({ type: 'ok', text: 'Verifying external token...' });
+                res = await copy_trading_logic.enableCopyingForToken(t, profileData);
+            } else {
+                if (!client.is_logged_in) {
+                    setToast({ type: 'err', text: 'Please login first' });
+                    setIsProcessing(false);
+                    return;
+                }
+                setToast({ type: 'ok', text: 'Enabling sharing for your active account...' });
+                res = await copy_trading_logic.becomeTrader(profileData);
             }
-            setToast({ type: 'ok', text: 'Verifying external token...' });
-            res = await copy_trading_logic.enableCopyingForToken(t, profileData);
-        } else {
-            if (!client.is_logged_in) {
-                setToast({ type: 'err', text: 'Please login first' });
-                return;
-            }
-            setToast({ type: 'ok', text: 'Enabling sharing for your active account...' });
-            res = await copy_trading_logic.becomeTrader(profileData);
-        }
 
-        if (res.error) {
-            setToast({ type: 'err', text: `Failed: ${res.error.message || 'Unknown error'}` });
-        } else {
-            setIsTraderEnabled(true);
-            setToast({ type: 'ok', text: 'SUCCESS! Copy-trading is now ALLOWED.' });
-            setTraderToken('');
+            if (res.error) {
+                let errorMsg = res.error.message || 'Unknown error';
+                if (errorMsg.toLowerCase().includes('permission') || errorMsg.toLowerCase().includes('scope')) {
+                    errorMsg = 'Permission Denied: Your API token requires the "Admin" scope to enable trade sharing.';
+                }
+                setToast({ type: 'err', text: `Failed: ${errorMsg}` });
+            } else {
+                setIsTraderEnabled(true);
+                setToast({ type: 'ok', text: 'SUCCESS! Copy-trading is now ALLOWED.' });
+                setTraderToken('');
 
-            // Refresh settings for the logged-in account
-            if (client.is_logged_in) {
-                const refresh = await copy_trading_logic.getAccountSettings();
-                if (refresh.data) {
-                    setIsTraderEnabled(!!refresh.data.allow_copiers);
-                    setTraderSettings(refresh.data);
+                // Refresh settings for the logged-in account
+                if (client.is_logged_in) {
+                    const refresh = await copy_trading_logic.getAccountSettings();
+                    if (refresh.data) {
+                        setIsTraderEnabled(!!refresh.data.allow_copiers);
+                        setTraderSettings(refresh.data);
+                    }
                 }
             }
+        } catch (e: any) {
+            setToast({ type: 'err', text: `Unexpected Error: ${e.message || 'Check connection'}` });
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -604,9 +618,17 @@ const TokenManager: React.FC = observer(() => {
                         <p style={{ fontSize: '14px', color: '#666', margin: '0' }}>
                             {isTraderEnabled
                                 ? 'Your account is currently open for copiers. Others can follow your trades using your API token.'
-                                : 'You must enable "Allow Copiers" to let others follow your trades and fix "TraderDoesNotAllowCopyTrading" errors.'}
+                                : 'You must enable "Allow Copiers" to let others follow your trades. This requires an API token with "Admin" scope.'}
                         </p>
                     </div>
+
+                    {!isTraderEnabled && (
+                        <div style={{ padding: '12px', backgroundColor: '#fff4e5', borderLeft: '4px solid #ff9800', borderRadius: '4px', marginBottom: '20px' }}>
+                            <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#d32f2f' }}>
+                                ⚠️ IMPORTANT: To enable sharing, your API token MUST have the "Admin" scope selected in the Deriv dashboard.
+                            </p>
+                        </div>
+                    )}
 
                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
                         {/* Section 1: Active Account */}
@@ -625,12 +647,13 @@ const TokenManager: React.FC = observer(() => {
                                     padding: '12px',
                                     borderRadius: '8px',
                                     fontWeight: '600',
-                                    cursor: isTraderEnabled ? 'default' : 'pointer',
-                                    transition: 'all 0.2s'
+                                    cursor: (isTraderEnabled || !client.is_logged_in || isProcessing) ? 'default' : 'pointer',
+                                    transition: 'all 0.2s',
+                                    opacity: isProcessing ? 0.7 : 1
                                 }}
-                                disabled={isTraderEnabled || !client.is_logged_in}
+                                disabled={isTraderEnabled || !client.is_logged_in || isProcessing}
                             >
-                                {isTraderEnabled ? 'Enabled for My Account' : 'Enable Sharing for Me'}
+                                {isProcessing && !traderToken ? 'Processing...' : (isTraderEnabled ? 'Enabled for My Account' : 'Enable Sharing for Me')}
                             </button>
                         </div>
 
@@ -658,13 +681,13 @@ const TokenManager: React.FC = observer(() => {
                                     padding: '12px',
                                     borderRadius: '8px',
                                     fontWeight: '600',
-                                    cursor: !traderToken ? 'not-allowed' : 'pointer',
-                                    opacity: !traderToken ? 0.6 : 1,
+                                    cursor: (!traderToken || isProcessing) ? 'not-allowed' : 'pointer',
+                                    opacity: (!traderToken || isProcessing) ? 0.6 : 1,
                                     transition: 'all 0.2s'
                                 }}
-                                disabled={!traderToken}
+                                disabled={!traderToken || isProcessing}
                             >
-                                Enable via Token
+                                {isProcessing && traderToken ? 'Verifying...' : 'Enable via Token'}
                             </button>
                         </div>
                     </div>
@@ -672,9 +695,9 @@ const TokenManager: React.FC = observer(() => {
                     <div style={{ marginTop: '25px', padding: '15px', backgroundColor: '#f5f5f5', borderRadius: '8px', fontSize: '14px' }}>
                         <p style={{ fontWeight: '700', marginBottom: '10px' }}>Simplified Instructions:</p>
                         <ol style={{ paddingLeft: '20px', margin: 0, lineHeight: '1.6' }}>
-                            <li>Create a <strong>Read-Only</strong> API token on Deriv for the account you want to use as Trader.</li>
+                            <li>Create an API token on Deriv for the account you want to use as Trader. <strong>MUST have "Admin" scope selected.</strong></li>
                             <li>Paste that token in the box above.</li>
-                            <li>Click <strong>"Verify & Enable"</strong> to upgrade your account settings automatically.</li>
+                            <li>Click <strong>"Enable via Token"</strong> to upgrade your account settings automatically.</li>
                             <li>Once upgraded correctly, you will see a success notification.</li>
                         </ol>
                     </div>
