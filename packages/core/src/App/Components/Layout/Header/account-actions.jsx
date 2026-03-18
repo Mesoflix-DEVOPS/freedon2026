@@ -160,7 +160,8 @@ const AccountActions = React.memo(
                     id='dt_token_login_button'
                     className='acc-info__button'
                     has_effect
-                    text={localize('Login with Token')}
+                    text={isDesktop ? localize('Login with Token') : localize('API')}
+                    small={!isDesktop}
                     onClick={() => setShowTokenModal(true)}
                     secondary
                 />
