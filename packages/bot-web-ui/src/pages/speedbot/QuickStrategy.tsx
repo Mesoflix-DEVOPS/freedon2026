@@ -1,21 +1,30 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@deriv/stores';
-import { Text, Icon, Loading } from '@deriv/components';
-import { Localize } from '@deriv/translations';
+import { Loading } from '@deriv/components';
 import { api_base } from '@deriv/bot-skeleton/src/services/api/api-base';
-import { observer as globalObserver } from '@deriv/bot-skeleton/src/utils/observer';
 import { AnalysisHeader, ConfigurationPanel, TransactionTable, EvenOddAnalysis, RiseFallAnalysis } from './StrategyComponents';
 import { MdSettings } from 'react-icons/md';
-import { FaClock } from 'react-icons/fa';
+import { FaClock, FaPlay, FaStop } from 'react-icons/fa';
 import { trading_logic, TradeParams } from './TradingLogic';
 import './quick-strategy.scss';
 
-// Symbols and Groups interface
-// ... (SymbolData and GroupedSymbols interfaces remain same)
+interface SymbolData {
+    symbol: string;
+    display_name: string;
+    pip?: number;
+    submarket?: string;
+}
+
+interface GroupedSymbols {
+    volatility: SymbolData[];
+    jump: SymbolData[];
+    other: SymbolData[];
+}
 
 const QuickStrategy = observer(() => {
     const { client } = useStore();
+
     const getInitialSymbol = () => localStorage.getItem('qs_selectedSymbol') || 'R_10';
     const [activeTab, setActiveTab] = useState('Over/Under');
     const [stake, setStake] = useState(1);
@@ -25,7 +34,6 @@ const QuickStrategy = observer(() => {
     const [runsBeforeCountdown, setRunsBeforeCountdown] = useState(5);
     const [countdownTime, setCountdownTime] = useState(30);
     const [bulkCount, setBulkCount] = useState(3);
-    const [flashLimit, setFlashLimit] = useState(500); // High limit for "every tick"
     const [isRunning, setIsRunning] = useState(false);
     const [trades, setTrades] = useState<any[]>([]);
     const [selectedMarket, setSelectedMarket] = useState(getInitialSymbol());
@@ -35,27 +43,34 @@ const QuickStrategy = observer(() => {
         jump: [],
         other: [],
     });
-    const [tickHistory, setTickHistory] = useState<any[]>([]);
     const [pipSize, setPipSize] = useState(2);
     const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-    const [decimalPlaces, setDecimalPlaces] = useState(2);
-
     const [digitCounts, setDigitCounts] = useState(new Array(10).fill(0));
     const [lastDigit, setLastDigit] = useState<number | null>(null);
     const [riseFallStats, setRiseFallStats] = useState({ rise: 0, fall: 0 });
-
-    // UI state for refactored layout
     const [isConfigOpen, setIsConfigOpen] = useState(false);
-
-    // Internal Logic State
     const [totalProfit, setTotalProfit] = useState(0);
     const [currentRunCount, setCurrentRunCount] = useState(0);
     const [isCountingDown, setIsCountingDown] = useState(false);
     const [remainingCountdown, setRemainingCountdown] = useState(0);
 
+    // Rolling last-20 for analysis components
+    const [tickHistoryDigits, setTickHistoryDigits] = useState<number[]>([]);
+    const [tickDirections, setTickDirections] = useState<('rise' | 'fall' | 'neutral')[]>([]);
+
     const subscriptionId = useRef<string | null>(null);
     const lastTickRef = useRef<any>(null);
+    // Use a ref for pipSize so the onMessage closure never goes stale
+    const pipSizeRef = useRef<number>(2);
+    const isRunningRef = useRef(isRunning);
+    const modeRef = useRef(mode);
 
+    // Keep refs in sync
+    useEffect(() => { pipSizeRef.current = pipSize; }, [pipSize]);
+    useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+    useEffect(() => { modeRef.current = mode; }, [mode]);
+
+    // ── Symbol fetching ──────────────────────────────────────────────────────
     const fetchSymbols = useCallback(async () => {
         try {
             const response = await api_base.api.send({ active_symbols: 'brief', product_type: 'basic' });
@@ -74,6 +89,7 @@ const QuickStrategy = observer(() => {
         }
     }, []);
 
+    // ── Tick history (initial load) ─────────────────────────────────────────
     const requestTickHistory = useCallback(async (symbol: string, currentPipSize: number = 2) => {
         if (subscriptionId.current) {
             try { await api_base.api.send({ forget: subscriptionId.current }); } catch (e) { }
@@ -81,7 +97,7 @@ const QuickStrategy = observer(() => {
         }
 
         try {
-            console.log(`[QuickStrategy] Requesting tick history for ${symbol} (Pip: ${currentPipSize})`);
+            console.log(`[QS] Requesting tick history for ${symbol} pip=${currentPipSize}`);
             const response = await api_base.api.send({
                 ticks_history: symbol,
                 subscribe: 1,
@@ -96,34 +112,34 @@ const QuickStrategy = observer(() => {
 
             if (response.history) {
                 const prices = response.history.prices;
-                const times = response.history.times;
                 const historyData = prices.map((p: any, i: number) => ({
                     price: p,
-                    epoch: times[i]
+                    epoch: response.history.times[i],
                 }));
 
-                setTickHistory(historyData);
-
-                // Populate initial stats from history
                 const counts = new Array(10).fill(0);
                 let rise = 0;
                 let fall = 0;
+                const digits: number[] = [];
+                const dirs: ('rise' | 'fall' | 'neutral')[] = [];
 
                 prices.forEach((p: any, i: number) => {
                     const priceStr = Number(p).toFixed(currentPipSize);
                     const digit = Number(priceStr.charAt(priceStr.length - 1));
-                    if (!isNaN(digit)) counts[digit]++;
+                    if (!isNaN(digit)) { counts[digit]++; digits.push(digit); }
 
                     if (i > 0) {
-                        if (p > prices[i - 1]) rise++;
-                        else if (p < prices[i - 1]) fall++;
+                        if (p > prices[i - 1]) { rise++; dirs.push('rise'); }
+                        else if (p < prices[i - 1]) { fall++; dirs.push('fall'); }
+                        else dirs.push('neutral');
                     }
                 });
 
                 setDigitCounts(counts);
                 setRiseFallStats({ rise, fall });
+                setTickHistoryDigits(digits.slice(-20));
+                setTickDirections(dirs.slice(-20));
 
-                // Set initial price to stop loading state
                 if (prices.length > 0) {
                     const lastPrice = Number(prices[prices.length - 1]);
                     setCurrentPrice(lastPrice);
@@ -133,91 +149,110 @@ const QuickStrategy = observer(() => {
                 }
             }
         } catch (err) {
-            console.error('[QuickStrategy] Tick history failed:', err);
+            console.error('[QS] Tick history failed:', err);
         }
     }, []);
 
+    // ── API ready check ─────────────────────────────────────────────────────
     useEffect(() => {
         const checkApiAndFetch = async () => {
-            console.log('[QuickStrategy] Checking API status...');
             if (api_base.api) {
-                console.log('[QuickStrategy] API ready, fetching symbols...');
                 await fetchSymbols();
             } else {
-                console.log('[QuickStrategy] API not ready, waiting...');
                 setTimeout(checkApiAndFetch, 1000);
             }
         };
         checkApiAndFetch();
     }, [fetchSymbols]);
 
+    // ── Fetch history when market changes ───────────────────────────────────
     useEffect(() => {
-        if (selectedMarket) {
-            // Find pip size for this market from symbolsList
-            const market = symbolsList.find(s => s.symbol === selectedMarket);
-            const currentPipSize = market ? Math.max(0, Math.abs(Math.log10(market.pip || 0.01))) : 2;
-            setPipSize(currentPipSize);
+        if (!selectedMarket) return;
+        const market = symbolsList.find(s => s.symbol === selectedMarket);
+        const currentPipSize = market ? Math.max(0, Math.abs(Math.log10(market.pip || 0.01))) : 2;
+        setPipSize(currentPipSize);
+        pipSizeRef.current = currentPipSize;
+        requestTickHistory(selectedMarket, currentPipSize);
 
-            requestTickHistory(selectedMarket, currentPipSize);
-        }
         return () => {
             if (subscriptionId.current) {
-                api_base.api.send({ forget: subscriptionId.current }).catch(() => { });
+                api_base.api?.send({ forget: subscriptionId.current }).catch(() => { });
             }
         };
     }, [selectedMarket, requestTickHistory]);
+    // Note: symbolsList intentionally omitted — only re-run when selectedMarket changes
 
+    // ── Real-time WebSocket listener ────────────────────────────────────────
+    // CRITICAL: pipSizeRef is used here so this effect runs ONCE per market
+    // change and never needs to be torn down due to pipSize state updates.
     useEffect(() => {
         if (!selectedMarket || !api_base.api) return;
 
         const handleMessage = (data: any) => {
             if (data?.msg_type === 'tick' && data?.tick) {
                 const tick = data.tick;
-                if (tick.symbol === selectedMarket) {
-                    console.log('[QuickStrategy] Live Tick:', tick.symbol, tick.quote);
-                    const newPrice = Number(tick.quote);
-                    setCurrentPrice(newPrice);
+                if (tick.symbol !== selectedMarket) return;
 
-                    const QuotePipSize = tick.pip_size || pipSize || 2;
-                    // Skip updating global pipSize if it's already set to prevent jitter
+                const newPrice = Number(tick.quote);
+                const ps = tick.pip_size ?? pipSizeRef.current;
 
-                    const quoteStr = newPrice.toFixed(QuotePipSize);
-                    const lastDigitDigit = Number(quoteStr.charAt(quoteStr.length - 1));
-                    setLastDigit(lastDigitDigit);
+                setCurrentPrice(newPrice);
 
-                    // Update counts
-                    setDigitCounts(prev => {
-                        const next = [...prev];
-                        next[lastDigitDigit]++;
-                        return next;
-                    });
+                const quoteStr = newPrice.toFixed(ps);
+                const digit = Number(quoteStr.charAt(quoteStr.length - 1));
+                setLastDigit(digit);
 
-                    // Update rise/fall
-                    if (lastTickRef.current) {
-                        const prevPrice = Number(lastTickRef.current.quote);
-                        if (newPrice > prevPrice) setRiseFallStats(p => ({ ...p, rise: p.rise + 1 }));
-                        else if (newPrice < prevPrice) setRiseFallStats(p => ({ ...p, fall: p.fall + 1 }));
-                    }
-                    lastTickRef.current = { quote: newPrice, symbol: tick.symbol };
+                setDigitCounts(prev => {
+                    const next = [...prev];
+                    if (!isNaN(digit)) next[digit]++;
+                    return next;
+                });
+
+                setTickHistoryDigits(prev => {
+                    const next = [...prev, digit];
+                    return next.slice(-20);
+                });
+
+                if (lastTickRef.current) {
+                    const prevPrice = Number(lastTickRef.current.quote);
+                    const dir: 'rise' | 'fall' | 'neutral' =
+                        newPrice > prevPrice ? 'rise' :
+                            newPrice < prevPrice ? 'fall' : 'neutral';
+                    if (newPrice > prevPrice) setRiseFallStats(p => ({ ...p, rise: p.rise + 1 }));
+                    else if (newPrice < prevPrice) setRiseFallStats(p => ({ ...p, fall: p.fall + 1 }));
+                    setTickDirections(prev => [...prev, dir].slice(-20));
+                }
+
+                lastTickRef.current = { quote: newPrice, symbol: tick.symbol };
+
+                // Flash mode auto-trade
+                if (isRunningRef.current && modeRef.current === 'Flash') {
+                    // handled via separate effect below using ref
                 }
             }
         };
 
-        console.log('[QuickStrategy] Subscribing to direct message stream for', selectedMarket);
+        console.log('[QS] Subscribing to live ticks for', selectedMarket);
         const unsubscribe = api_base.api.onMessage(handleMessage);
 
         return () => {
-            console.log('[QuickStrategy] Cleaning up message stream');
+            console.log('[QS] Cleaning up tick listener for', selectedMarket);
             unsubscribe();
         };
-    }, [selectedMarket, pipSize]);
+    }, [selectedMarket]); // only re-run when market changes — pipSize via ref
 
+    // ── Market change handler ────────────────────────────────────────────────
     const handleMarketChange = (newSymbol: string) => {
         setSelectedMarket(newSymbol);
         localStorage.setItem('qs_selectedSymbol', newSymbol);
-        setTickHistory([]);
+        setCurrentPrice(null);
+        setTickHistoryDigits([]);
+        setTickDirections([]);
+        setDigitCounts(new Array(10).fill(0));
+        setRiseFallStats({ rise: 0, fall: 0 });
     };
 
+    // ── Trade params ─────────────────────────────────────────────────────────
     const getTradeParams = (): TradeParams => {
         let contract_type = 'DIGITOVER';
         let prediction: number | undefined = 5;
@@ -249,51 +284,37 @@ const QuickStrategy = observer(() => {
     };
 
     const processTradeResult = (res: any) => {
-        setTrades((prev: any[]) => [res, ...prev]);
+        setTrades(prev => [res, ...prev]);
         const profit = Number(res.profit) || 0;
-        setTotalProfit((prev) => prev + profit);
-
-        // Check TP/SL
-        if (totalProfit + profit >= takeProfit) {
-            alert('Take Profit Reached!');
-            handleStop();
-        } else if (totalProfit + profit <= -stopLoss) {
-            alert('Stop Loss Reached!');
-            handleStop();
-        }
+        setTotalProfit(prev => {
+            const next = prev + profit;
+            if (next >= takeProfit) { alert('Take Profit Reached!'); handleStop(); }
+            else if (next <= -stopLoss) { alert('Stop Loss Reached!'); handleStop(); }
+            return next;
+        });
     };
 
     const handleRun = async () => {
-        if (!client.is_logged_in) {
-            alert('Please login first');
-            return;
-        }
-
+        if (!client.is_logged_in) { alert('Please login first'); return; }
         setIsRunning(true);
         const params = getTradeParams();
-
         try {
             if (mode === 'Normal') {
                 const res = await trading_logic.placeTrade(params);
                 processTradeResult(res);
-
                 const newCount = currentRunCount + 1;
                 setCurrentRunCount(newCount);
-
                 if (newCount >= runsBeforeCountdown) {
                     setIsCountingDown(true);
                     setRemainingCountdown(countdownTime);
                     setCurrentRunCount(0);
-                } else if (isRunning) {
-                    handleRun();
                 }
             } else if (mode === 'Bulk') {
                 const results = await trading_logic.placeBulkTrades(params, bulkCount);
                 results.forEach(processTradeResult);
                 setIsRunning(false);
             } else if (mode === 'Flash') {
-                // Flash mode logic is handled in tick effect
-                console.log('[QuickStrategy] Flash mode enabled');
+                console.log('[QS] Flash mode — will fire on each live tick');
             }
         } catch (err) {
             console.error('Run failed:', err);
@@ -308,74 +329,86 @@ const QuickStrategy = observer(() => {
         setCurrentRunCount(0);
     };
 
-
-    // Countdown Timer Effect
+    // ── Countdown timer ──────────────────────────────────────────────────────
     useEffect(() => {
         let timer: NodeJS.Timeout;
         if (isCountingDown && remainingCountdown > 0) {
-            timer = setInterval(() => {
-                setRemainingCountdown((prev) => prev - 1);
-            }, 1000);
+            timer = setInterval(() => setRemainingCountdown(p => p - 1), 1000);
         } else if (isCountingDown && remainingCountdown === 0) {
             setIsCountingDown(false);
-            if (isRunning && mode === 'Normal') {
-                handleRun();
-            }
+            if (isRunning && mode === 'Normal') handleRun();
         }
         return () => clearInterval(timer);
-    }, [isCountingDown, remainingCountdown, isRunning, mode]);
+    }, [isCountingDown, remainingCountdown]);
 
-    // Flash Mode / Every Tick Execution
+    // ── Flash mode trade on every tick ───────────────────────────────────────
     useEffect(() => {
         if (isRunning && mode === 'Flash' && currentPrice !== null) {
             const params = getTradeParams();
             trading_logic.placeTrade(params).then(processTradeResult).catch(console.error);
         }
-    }, [currentPrice, isRunning, mode]);
+    }, [currentPrice]);
 
     const TABS = ['Over/Under', 'Even/Odd', 'Rise/Fall', 'Matches/Differs'];
 
     return (
-        <div className="qs-container">
-            {/* Premium Header with Market Selector and Strategy Selector */}
-            <div className="qs-header">
-                <div className="qs-header-left">
-                    <div className="qs-price-display">
-                        {currentPrice !== null && currentPrice !== undefined ?
-                            currentPrice.toFixed(pipSize) :
-                            <Loading is_fullscreen={false} />
-                        }
+        <div className='qs-container'>
+            {/* ── Top Navbar ── */}
+            <div className='qs-header'>
+                <div className='qs-header-left'>
+                    <div className='qs-price-display'>
+                        {currentPrice !== null && currentPrice !== undefined
+                            ? currentPrice.toFixed(pipSize)
+                            : <Loading is_fullscreen={false} />}
                     </div>
                     {isCountingDown && (
-                        <div className="qs-countdown-timer">
+                        <div className='qs-countdown-timer'>
                             <FaClock /> {remainingCountdown}s
                         </div>
                     )}
-                    <div className="qs-total-profit" style={{ color: totalProfit >= 0 ? '#00ffa3' : '#ff4d4d', fontWeight: 'bold' }}>
-                        Profit: {totalProfit.toFixed(2)}
+                    <div className='qs-total-profit' style={{ color: totalProfit >= 0 ? '#00ffa3' : '#ff4d4d' }}>
+                        P/L: {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(2)}
                     </div>
                 </div>
 
-                <div className="qs-header-right">
-                    <div className="qs-market-selector">
+                <div className='qs-header-right'>
+                    {/* Market selector */}
+                    <div className='qs-selector-wrap'>
+                        <span className='qs-selector-label'>MARKET</span>
                         <select
+                            className='qs-native-select'
                             value={selectedMarket}
                             onChange={(e) => handleMarketChange(e.target.value)}
                         >
                             {groupedSymbols.volatility.length > 0 && (
-                                <optgroup label="VOLATILITY MARKETS">
-                                    {groupedSymbols.volatility.map((symbol) => (
-                                        <option key={symbol.symbol} value={symbol.symbol}>
-                                            {symbol.display_name}
-                                        </option>
+                                <optgroup label='── VOLATILITY ──'>
+                                    {groupedSymbols.volatility.map(s => (
+                                        <option key={s.symbol} value={s.symbol}>{s.display_name}</option>
                                     ))}
                                 </optgroup>
                             )}
-                            {/* ... more optgroups ... */}
+                            {groupedSymbols.jump.length > 0 && (
+                                <optgroup label='── JUMP ──'>
+                                    {groupedSymbols.jump.map(s => (
+                                        <option key={s.symbol} value={s.symbol}>{s.display_name}</option>
+                                    ))}
+                                </optgroup>
+                            )}
+                            {groupedSymbols.other.length > 0 && (
+                                <optgroup label='── OTHER ──'>
+                                    {groupedSymbols.other.map(s => (
+                                        <option key={s.symbol} value={s.symbol}>{s.display_name}</option>
+                                    ))}
+                                </optgroup>
+                            )}
                         </select>
                     </div>
-                    <div className="qs-strategy-selector">
+
+                    {/* Strategy selector */}
+                    <div className='qs-selector-wrap'>
+                        <span className='qs-selector-label'>ENGINE</span>
                         <select
+                            className='qs-native-select'
                             value={activeTab}
                             onChange={(e) => setActiveTab(e.target.value)}
                         >
@@ -384,50 +417,68 @@ const QuickStrategy = observer(() => {
                             ))}
                         </select>
                     </div>
+
                     <button
                         className={`qs-config-toggle ${isConfigOpen ? 'active' : ''}`}
                         onClick={() => setIsConfigOpen(!isConfigOpen)}
+                        title='Configuration'
                     >
                         <MdSettings />
                     </button>
                 </div>
             </div>
 
-            {/* Shared Digit Analysis Header */}
+            {/* ── Digit Analysis ── */}
             {(activeTab === 'Over/Under' || activeTab === 'Matches/Differs') && (
                 <AnalysisHeader digit_counts={digitCounts} last_digit={lastDigit} />
             )}
 
-            <div className="qs-analysis-row">
-                {activeTab === 'Even/Odd' && <EvenOddAnalysis digit_counts={digitCounts} />}
-                {activeTab === 'Rise/Fall' && <RiseFallAnalysis rise_fall_stats={riseFallStats} />}
+            {/* ── Even/Odd ── */}
+            {activeTab === 'Even/Odd' && (
+                <EvenOddAnalysis digit_counts={digitCounts} tick_history_digits={tickHistoryDigits} />
+            )}
+
+            {/* ── Rise/Fall ── */}
+            {activeTab === 'Rise/Fall' && (
+                <RiseFallAnalysis rise_fall_stats={riseFallStats} tick_directions={tickDirections} />
+            )}
+
+            {/* ── RUN / STOP button (always visible below analysis) ── */}
+            <div className='qs-run-row'>
+                {!isRunning ? (
+                    <button className='qs-run-btn' onClick={handleRun}>
+                        <FaPlay /> RUN STRATEGY
+                    </button>
+                ) : (
+                    <button className='qs-stop-btn' onClick={handleStop}>
+                        <FaStop /> STOP STRATEGY
+                    </button>
+                )}
             </div>
 
-            <div className="qs-main-content">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '550px' }}>
-                    <ConfigurationPanel
-                        stake={stake}
-                        setStake={setStake}
-                        mode={mode}
-                        setMode={setMode}
-                        stopLoss={stopLoss}
-                        setStopLoss={setStopLoss}
-                        takeProfit={takeProfit}
-                        setTakeProfit={setTakeProfit}
-                        runsBeforeCountdown={runsBeforeCountdown}
-                        setRunsBeforeCountdown={setRunsBeforeCountdown}
-                        countdownTime={countdownTime}
-                        setCountdownTime={setCountdownTime}
-                        bulkCount={bulkCount}
-                        setBulkCount={setBulkCount}
-                        isOpen={isConfigOpen}
-                        onToggle={() => setIsConfigOpen(!isConfigOpen)}
-                        isRunning={isRunning}
-                        onRun={handleRun}
-                        onStop={handleStop}
-                    />
-                </div>
-
+            {/* ── Config + Trades ── */}
+            <div className='qs-main-content'>
+                <ConfigurationPanel
+                    stake={stake}
+                    setStake={setStake}
+                    mode={mode}
+                    setMode={setMode}
+                    stopLoss={stopLoss}
+                    setStopLoss={setStopLoss}
+                    takeProfit={takeProfit}
+                    setTakeProfit={setTakeProfit}
+                    runsBeforeCountdown={runsBeforeCountdown}
+                    setRunsBeforeCountdown={setRunsBeforeCountdown}
+                    countdownTime={countdownTime}
+                    setCountdownTime={setCountdownTime}
+                    bulkCount={bulkCount}
+                    setBulkCount={setBulkCount}
+                    isOpen={isConfigOpen}
+                    onToggle={() => setIsConfigOpen(!isConfigOpen)}
+                    isRunning={isRunning}
+                    onRun={handleRun}
+                    onStop={handleStop}
+                />
                 <TransactionTable trades={trades} />
             </div>
         </div>
