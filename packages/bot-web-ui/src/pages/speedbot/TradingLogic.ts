@@ -58,7 +58,6 @@ class TradingLogic {
 
         const proposal_req = {
             proposal: 1,
-            subscribe: 0,
             ...cleanedParams,
         };
 
