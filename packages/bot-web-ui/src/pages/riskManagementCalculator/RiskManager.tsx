@@ -109,9 +109,9 @@ const RiskManager: React.FC = observer(() => {
         }
     }, [toast]);
 
-    const stakeAmount = isCalculated ? (Number(capital) * 0.1).toFixed(2) : '0.00';
-    const takeProfit = isCalculated ? (Number(capital) * 0.1).toFixed(2) : '0.00';
-    const stopLoss = isCalculated ? (Number(capital) * 0.1).toFixed(2) : '0.00';
+    const stakeAmount = isCalculated ? (Number(capital) * 0.02).toFixed(2) : '0.00';
+    const takeProfit = isCalculated ? (Number(capital) * 0.05).toFixed(2) : '0.00';
+    const stopLoss = isCalculated ? (Number(capital) * 0.2).toFixed(2) : '0.00';
 
     return (
         <div className="riskManagerContainer">
@@ -172,46 +172,31 @@ const RiskManager: React.FC = observer(() => {
                         <div className="resultsSection">
                             <h3 style={{ marginBottom: '20px' }}>Strategy Recommendation</h3>
 
-                            <div className="dailySettings" style={{ marginBottom: '20px', padding: '15px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '10px', fontWeight: 'bold' }}>DAILY ANNOUNCEMENT LIMITS</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                                    <div>
-                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>PROFIT ($)</label>
-                                        <input
-                                            type="number"
-                                            value={dailyProfitLimit}
-                                            onChange={(e) => setDailyProfitLimit(e.target.value)}
-                                            style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px', borderRadius: '6px', color: '#4ade80', fontSize: '14px', fontWeight: 'bold' }}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>STOP LOSS ($)</label>
-                                        <input
-                                            type="number"
-                                            value={dailyStopLoss}
-                                            onChange={(e) => setDailyStopLoss(e.target.value)}
-                                            style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px', borderRadius: '6px', color: '#f87171', fontSize: '14px', fontWeight: 'bold' }}
-                                        />
-                                    </div>
-                                </div>
+                            <div className="strategyTips" style={{ marginBottom: '20px', padding: '15px', background: 'rgba(56, 189, 248, 0.05)', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
+                                <div style={{ fontSize: '13px', color: '#38bdf8', marginBottom: '10px', fontWeight: 'bold' }}>QUICK TIPS</div>
+                                <ul style={{ fontSize: '12px', color: '#94a3b8', margin: 0, paddingLeft: '15px' }}>
+                                    <li>Trade 5-10 times per session.</li>
+                                    <li>Stop at 5-10% profit ($ {takeProfit}).</li>
+                                    <li>Stop loss at 20-30% ($ {stopLoss}).</li>
+                                </ul>
                             </div>
 
                             <div className="resultsGrid">
                                 <div className="resultItem" style={{ background: 'rgba(56, 189, 248, 0.1)', borderLeft: '4px solid #38bdf8' }}>
-                                    <span className="label">Safe Stake</span>
+                                    <span className="label">Safe Stake (2%)</span>
                                     <span className="value">${stakeAmount}</span>
                                 </div>
                                 <div className="resultItem" style={{ background: 'rgba(74, 222, 128, 0.1)', borderLeft: '4px solid #4ade80' }}>
-                                    <span className="label">Take Profit Target</span>
+                                    <span className="label">Target (5%)</span>
                                     <span className="value">${takeProfit}</span>
                                 </div>
                                 <div className="resultItem" style={{ background: 'rgba(248, 113, 113, 0.1)', borderLeft: '4px solid #f87171' }}>
-                                    <span className="label">Stop Loss Limit</span>
+                                    <span className="label">Stop Loss (20%)</span>
                                     <span className="value">${stopLoss}</span>
                                 </div>
                                 <div className="resultItem" style={{ background: 'rgba(129, 140, 248, 0.1)', borderLeft: '4px solid #818cf8' }}>
-                                    <span className="label">Max Martingale</span>
-                                    <span className="value">3 Steps</span>
+                                    <span className="label">Max Loss Streak</span>
+                                    <span className="value">3-4 Trades</span>
                                 </div>
                             </div>
 

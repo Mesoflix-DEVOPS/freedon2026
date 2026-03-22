@@ -59,6 +59,10 @@ class TradingLogic {
                 throw proposal_res.error;
             }
 
+            if (!proposal_res.proposal) {
+                throw new Error('Proposal failed: No data returned');
+            }
+
             const { id, ask_price } = proposal_res.proposal;
 
             // 2. Buy

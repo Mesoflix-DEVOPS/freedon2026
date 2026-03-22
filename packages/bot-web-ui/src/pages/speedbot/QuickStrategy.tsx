@@ -48,6 +48,7 @@ const QuickStrategy = observer(() => {
     const [digitCounts, setDigitCounts] = useState(new Array(10).fill(0));
     const [lastDigit, setLastDigit] = useState<number | null>(null);
     const [riseFallStats, setRiseFallStats] = useState({ rise: 0, fall: 0 });
+    const [selectedDigit, setSelectedDigit] = useState(5);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [totalProfit, setTotalProfit] = useState(0);
     const [currentRunCount, setCurrentRunCount] = useState(0);
@@ -257,13 +258,15 @@ const QuickStrategy = observer(() => {
     };
 
     // ── Trade params ─────────────────────────────────────────────────────────
+    const [digitType, setDigitType] = useState('Over'); // For Over/Under selector
+
     const getTradeParams = (): TradeParams => {
         let contract_type = 'DIGITOVER';
-        let prediction: number | undefined = 5;
+        let prediction: number | undefined = selectedDigit;
 
         if (activeTab === 'Over/Under') {
-            contract_type = 'DIGITOVER';
-            prediction = 5;
+            contract_type = digitType === 'Over' ? 'DIGITOVER' : 'DIGITUNDER';
+            prediction = selectedDigit;
         } else if (activeTab === 'Even/Odd') {
             contract_type = 'DIGITEVEN';
             prediction = undefined;
@@ -271,8 +274,10 @@ const QuickStrategy = observer(() => {
             contract_type = 'CALL';
             prediction = undefined;
         } else if (activeTab === 'Matches/Differs') {
-            contract_type = 'DIGITMATCH';
-            prediction = 0;
+            // Note: Currently defaulting to DIFFERS as it's more common for bots, 
+            // but we can add another toggle if needed.
+            contract_type = 'DIGITDIFF';
+            prediction = selectedDigit;
         }
 
         return {
@@ -376,6 +381,31 @@ const QuickStrategy = observer(() => {
                 </div>
 
                 <div className='qs-header-right'>
+                    {/* Digit Selection UI */}
+                    {(activeTab === 'Over/Under' || activeTab === 'Matches/Differs') && (
+                        <div className='qs-digit-selector'>
+                            {activeTab === 'Over/Under' && (
+                                <select
+                                    className='qs-native-select short'
+                                    value={digitType}
+                                    onChange={(e) => setDigitType(e.target.value)}
+                                >
+                                    <option value='Over'>Over</option>
+                                    <option value='Under'>Under</option>
+                                </select>
+                            )}
+                            <select
+                                className='qs-native-select short'
+                                value={selectedDigit}
+                                onChange={(e) => setSelectedDigit(Number(e.target.value))}
+                            >
+                                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
+                                    <option key={d} value={d}>{d}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     {/* Market selector */}
                     <div className='qs-selector-wrap'>
                         <span className='qs-selector-label'>MARKET</span>

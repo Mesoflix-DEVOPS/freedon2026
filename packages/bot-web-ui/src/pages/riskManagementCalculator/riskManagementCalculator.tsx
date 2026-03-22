@@ -86,48 +86,50 @@ const RiskManagementCalculator = () => {
 
                         <div className={styles.resultsGrid}>
                             <ResultCard
-                                title="Stake Amount"
-                                value={isCalculated ? `$${(Number(capital) * 0.1).toFixed(2)}` : '$0.00'}
+                                title="Safe Stake (1-5%)"
+                                value={isCalculated ? `$${(Number(capital) * 0.02).toFixed(2)} - $${(Number(capital) * 0.05).toFixed(2)}` : '$0.00'}
                                 color="#4A5FB3"
                                 icon="💰"
                             />
                             <ResultCard
-                                title="Take Profit"
-                                value={isCalculated ? `$${(Number(capital) * 3 * 0.1).toFixed(2)}` : '$0.00'}
+                                title="Lock Profit (5-10%)"
+                                value={isCalculated ? `$${(Number(capital) * 0.05).toFixed(2)} - $${(Number(capital) * 0.1).toFixed(2)}` : '$0.00'}
                                 color="#4BB4B3"
                                 icon="🎯"
                             />
                             <ResultCard
-                                title="Stop Loss"
-                                value={isCalculated ? `$${(Number(capital) * 3 * 0.1).toFixed(2)}` : '$0.00'}
+                                title="Stop Loss (20-30%)"
+                                value={isCalculated ? `$${(Number(capital) * 0.2).toFixed(2)} - $${(Number(capital) * 0.3).toFixed(2)}` : '$0.00'}
                                 color="#FF444F"
                                 icon="🛑"
                             />
                             <ResultCard
-                                title="Loss Protection"
-                                value="3 Trades"
+                                title="Loss Streak Limit"
+                                value="3-4 Trades"
                                 color="#A18CD1"
                                 icon="🛡️"
                             />
                         </div>
 
+                        <div className={styles.strategySuggestions}>
+                            <h3 className={styles.suggestionsTitle}>Simple Risk Management Plan</h3>
+                            <ul className={styles.suggestionsList}>
+                                <li><strong>1. Short Sessions:</strong> Run bot 5-10 times only.</li>
+                                <li><strong>2. Small Trades:</strong> Use 1% to 5% of account only.</li>
+                                <li><strong>3. Lock Profits:</strong> Stop at 5% to 10% profit daily.</li>
+                                <li><strong>4. Protect Capital:</strong> Set stop loss at 20% to 30%.</li>
+                                <li><strong>5. Stop Losing Streaks:</strong> Turn off after 3-4 losses.</li>
+                            </ul>
+                        </div>
+
                         <div className={styles.warningBox}>
                             <div className={styles.warningTitle}>
-                                <span>⚠️</span> Martingale Sequence (x2)
+                                <span>⚠️</span> Session Safety
                             </div>
                             <div className={styles.warningContent}>
                                 {isCalculated
-                                    ? `${(Number(capital) * 0.02).toFixed(2)} → ${(Number(capital) * 0.04).toFixed(2)} → ${(Number(capital) * 0.08).toFixed(2)}`
-                                    : 'Enter amount to calculate'}
-                            </div>
-                        </div>
-
-                        <div className={styles.infoBox}>
-                            <div className={styles.infoTitle}>
-                                <span>💼</span> Required Capital Buffer
-                            </div>
-                            <div className={styles.infoValue}>
-                                {isCalculated ? `$${(Number(capital) * 0.02 * 7).toFixed(2)}` : '$0.00'}
+                                    ? `Slow, steady, and smart = more money 💵📊. Suggested Stake: $${(Number(capital) * 0.02).toFixed(2)}`
+                                    : 'Enter amount to see suggestions'}
                             </div>
                         </div>
                     </div>
