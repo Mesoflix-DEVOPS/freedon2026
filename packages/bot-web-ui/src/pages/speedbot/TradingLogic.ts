@@ -34,16 +34,27 @@ class TradingLogic {
     async placeTrade(params: TradeParams): Promise<any> {
         if (!api_base.api) throw new Error('API not initialized');
 
-        // Clean up parameters - avoid sending 'prediction' if it's undefined or not allowed
+        // Clean up parameters
         const cleanedParams: any = { ...params };
-        if (cleanedParams.prediction === undefined || cleanedParams.prediction === null) {
+
+        // Digit trades require 'barrier' instead of 'prediction' in the proposal API
+        if (cleanedParams.contract_type?.startsWith('DIGIT') && cleanedParams.prediction !== undefined) {
+            cleanedParams.barrier = cleanedParams.prediction.toString();
             delete cleanedParams.prediction;
         }
 
-        // Special case: Rise/Fall (CALL/PUT) does not accept prediction
+        // Special case: Rise/Fall (CALL/PUT) does not accept prediction or barrier
         if (cleanedParams.contract_type === 'CALL' || cleanedParams.contract_type === 'PUT') {
             delete cleanedParams.prediction;
+            delete cleanedParams.barrier;
         }
+
+        // Remove any undefined/null properties
+        Object.keys(cleanedParams).forEach(key => {
+            if (cleanedParams[key] === undefined || cleanedParams[key] === null) {
+                delete cleanedParams[key];
+            }
+        });
 
         const proposal_req = {
             proposal: 1,

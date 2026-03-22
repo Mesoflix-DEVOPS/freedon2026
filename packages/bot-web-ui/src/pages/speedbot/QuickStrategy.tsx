@@ -262,22 +262,20 @@ const QuickStrategy = observer(() => {
 
     const getTradeParams = (): TradeParams => {
         let contract_type = 'DIGITOVER';
-        let prediction: number | undefined = selectedDigit;
+        let barrier: string | undefined = selectedDigit.toString();
 
         if (activeTab === 'Over/Under') {
             contract_type = digitType === 'Over' ? 'DIGITOVER' : 'DIGITUNDER';
-            prediction = selectedDigit;
+            barrier = selectedDigit.toString();
         } else if (activeTab === 'Even/Odd') {
             contract_type = 'DIGITEVEN';
-            prediction = undefined;
+            barrier = undefined;
         } else if (activeTab === 'Rise/Fall') {
             contract_type = 'CALL';
-            prediction = undefined;
+            barrier = undefined;
         } else if (activeTab === 'Matches/Differs') {
-            // Note: Currently defaulting to DIFFERS as it's more common for bots, 
-            // but we can add another toggle if needed.
             contract_type = 'DIGITDIFF';
-            prediction = selectedDigit;
+            barrier = selectedDigit.toString();
         }
 
         return {
@@ -288,7 +286,7 @@ const QuickStrategy = observer(() => {
             duration: 1,
             duration_unit: 't',
             symbol: selectedMarket,
-            prediction,
+            barrier,
         };
     };
 

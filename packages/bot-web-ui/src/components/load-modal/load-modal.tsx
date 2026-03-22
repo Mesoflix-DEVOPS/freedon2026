@@ -37,6 +37,9 @@ const LoadModal: React.FC = observer(() => {
         });
     };
 
+    const is_file_loaded = !!loaded_local_file && (is_desktop ? active_index === 1 : active_index === 0);
+    const has_recent_strategies = recent_strategies.length > 0 && (is_desktop ? active_index === 0 : false);
+
     if (!is_desktop) {
         return (
             <MobileFullPageModal
@@ -62,12 +65,14 @@ const LoadModal: React.FC = observer(() => {
                         <GoogleDrive />
                     </div>
                 </Tabs>
+                {is_file_loaded && (
+                    <div className='load-strategy__local-footer'>
+                        <LocalFooter />
+                    </div>
+                )}
             </MobileFullPageModal>
         );
     }
-
-    const is_file_loaded = !!loaded_local_file && tab_name === tabs_title.TAB_LOCAL;
-    const has_recent_strategies = recent_strategies.length > 0 && tab_name === tabs_title.TAB_RECENT;
 
     return (
         <Modal
