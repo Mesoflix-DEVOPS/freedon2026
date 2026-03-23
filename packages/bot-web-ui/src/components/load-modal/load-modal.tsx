@@ -65,11 +65,7 @@ const LoadModal: React.FC = observer(() => {
                         <GoogleDrive />
                     </div>
                 </Tabs>
-                {is_file_loaded && (
-                    <div className='load-strategy__local-footer'>
-                        <LocalFooter />
-                    </div>
-                )}
+                {/* LocalFooter has been moved inside Local component */}
             </MobileFullPageModal>
         );
     }
@@ -109,11 +105,7 @@ const LoadModal: React.FC = observer(() => {
                     <RecentFooter />
                 </Modal.Footer>
             )}
-            {is_file_loaded && (
-                <Modal.Footer has_separator>
-                    <LocalFooter />
-                </Modal.Footer>
-            )}
+            {/* LocalFooter has been moved inside Local component */}
         </Modal>
     );
 });

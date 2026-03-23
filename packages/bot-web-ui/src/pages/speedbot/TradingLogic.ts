@@ -19,12 +19,14 @@ export interface TradeParams {
 
 export interface TradeResult {
     id: string;
-    ref: string;
+    ref?: string;
     status: 'pending' | 'won' | 'lost' | 'error';
     profit?: number;
-    entry_tick?: string;
-    exit_tick?: string;
+    buy_price?: number;
+    entry_tick?: string | number;
+    exit_tick?: string | number;
     contract_id?: number | string;
+    contract_type?: string;
 }
 
 class TradingLogic {
@@ -88,14 +90,70 @@ class TradingLogic {
                 amount: ask_price || cleanedParams.amount
             });
 
-            return buy_res.buy;
+            const contract_id = buy_res.buy.contract_id;
+
+            // 3. Monitor until resolved
+            return new Promise<TradeResult>((resolve, reject) => {
+                let poc_sub: any;
+                let isResolved = false;
+
+                const cleanup = () => {
+                    if (poc_sub && typeof poc_sub.unsubscribe === 'function') {
+                        poc_sub.unsubscribe();
+                    } else if (contract_id) {
+                        try { api_base.api.send({ forget_all: 'proposal_open_contract' }); } catch (e) { }
+                    }
+                };
+
+                const checkResult = (contract: any) => {
+                    if (!contract || isResolved) return;
+                    if (contract.is_sold) {
+                        isResolved = true;
+                        cleanup();
+                        const profit = Number(contract.profit);
+                        resolve({
+                            id: contract.contract_id?.toString() || '',
+                            contract_id: contract.contract_id,
+                            profit: profit,
+                            buy_price: contract.buy_price,
+                            contract_type: contract.contract_type,
+                            status: profit > 0 ? 'won' : profit < 0 ? 'lost' : 'pending',
+                            entry_tick: contract.entry_tick,
+                            exit_tick: contract.exit_tick,
+                        });
+                    }
+                };
+
+                try {
+                    poc_sub = api_base.api.onMessage().subscribe(({ data }: any) => {
+                        if (data?.msg_type === 'proposal_open_contract' && data.proposal_open_contract?.contract_id === contract_id) {
+                            checkResult(data.proposal_open_contract);
+                        }
+                    });
+
+                    api_base.api.send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).then((res: any) => {
+                        if (res.error) {
+                            cleanup();
+                            reject(res.error);
+                        } else if (res.proposal_open_contract) {
+                            checkResult(res.proposal_open_contract);
+                        }
+                    }).catch((err: any) => {
+                        cleanup();
+                        reject(err);
+                    });
+                } catch (e: any) {
+                    cleanup();
+                    reject(e);
+                }
+            });
         } catch (error) {
             console.error('[TradeLogic] Trade placement failed:', error);
             throw error;
         }
     }
 
-    async placeBulkTrades(params: TradeParams, quantity: number): Promise<any[]> {
+    async placeBulkTrades(params: TradeParams, quantity: number): Promise<TradeResult[]> {
         console.log(`[TradeLogic] Executing bulk trades: ${quantity}`);
         const trades = Array.from({ length: quantity }, () => this.placeTrade(params));
         return Promise.all(trades);

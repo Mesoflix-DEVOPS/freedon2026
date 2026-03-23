@@ -40,8 +40,11 @@ const LocalComponent = observer(() => {
                         'load-strategy__local-preview--active': active_tab === 1 && active_tour,
                     })}
                 >
-                    <div className='load-strategy__title'>
+                    <div className='load-strategy__title' style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1rem 0' }}>
                         <Localize i18n_default_text='Preview' />
+                        <div className="load-strategy__local-footer" style={{ margin: 0, padding: 0 }}>
+                            <LocalFooter />
+                        </div>
                     </div>
                     <div className='load-strategy__preview-workspace'>
                         <div id='load-strategy__blockly-container' style={{ height: '100%' }}>
@@ -56,11 +59,7 @@ const LocalComponent = observer(() => {
                         </div>
                     </div>
                 </div>
-                {!is_desktop && (
-                    <div className='load-strategy__local-footer'>
-                        <LocalFooter />
-                    </div>
-                )}
+                {/* Removed bottom footer since it is now at the top */}
             </div>
         );
     }

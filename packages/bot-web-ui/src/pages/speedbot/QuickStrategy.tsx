@@ -55,7 +55,14 @@ const QuickStrategy = observer(() => {
     const [isCountingDown, setIsCountingDown] = useState(false);
     const [remainingCountdown, setRemainingCountdown] = useState(0);
 
-    // Rolling last-20 for analysis components
+    // Trade Type Option States
+    const [digitType, setDigitType] = useState('Over');
+    const [evenOddType, setEvenOddType] = useState('Even');
+    const [riseFallType, setRiseFallType] = useState('Rise');
+    const [matchesDiffersType, setMatchesDiffersType] = useState('Matches');
+
+    // History and Analysis States
+    const [last1000Digits, setLast1000Digits] = useState<number[]>([]);
     const [tickHistoryDigits, setTickHistoryDigits] = useState<number[]>([]);
     const [tickDirections, setTickDirections] = useState<('rise' | 'fall' | 'neutral')[]>([]);
 
@@ -138,6 +145,7 @@ const QuickStrategy = observer(() => {
 
                 setDigitCounts(counts);
                 setRiseFallStats({ rise, fall });
+                setLast1000Digits(digits);
                 setTickHistoryDigits(digits.slice(-20));
                 setTickDirections(dirs.slice(-20));
 
@@ -203,9 +211,24 @@ const QuickStrategy = observer(() => {
                 const digit = Number(quoteStr.charAt(quoteStr.length - 1));
                 setLastDigit(digit);
 
-                setDigitCounts(prev => {
-                    const next = [...prev];
-                    if (!isNaN(digit)) next[digit]++;
+                setLast1000Digits(prev => {
+                    const next = [...prev, digit];
+                    if (next.length > 1000) {
+                        const removed = next.shift();
+                        // Optimistically update counts
+                        setDigitCounts(prevCounts => {
+                            const newCounts = [...prevCounts];
+                            if (removed !== undefined && !isNaN(removed)) newCounts[removed]--;
+                            if (!isNaN(digit)) newCounts[digit]++;
+                            return newCounts;
+                        });
+                    } else {
+                        setDigitCounts(prevCounts => {
+                            const newCounts = [...prevCounts];
+                            if (!isNaN(digit)) newCounts[digit]++;
+                            return newCounts;
+                        });
+                    }
                     return next;
                 });
 
@@ -258,7 +281,6 @@ const QuickStrategy = observer(() => {
     };
 
     // ── Trade params ─────────────────────────────────────────────────────────
-    const [digitType, setDigitType] = useState('Over'); // For Over/Under selector
 
     const getTradeParams = (): TradeParams => {
         let contract_type = 'DIGITOVER';
@@ -268,18 +290,18 @@ const QuickStrategy = observer(() => {
             contract_type = digitType === 'Over' ? 'DIGITOVER' : 'DIGITUNDER';
             barrier = selectedDigit.toString();
         } else if (activeTab === 'Even/Odd') {
-            contract_type = 'DIGITEVEN';
+            contract_type = evenOddType === 'Even' ? 'DIGITEVEN' : 'DIGITODD';
             barrier = undefined;
         } else if (activeTab === 'Rise/Fall') {
-            contract_type = 'CALL';
+            contract_type = riseFallType === 'Rise' ? 'CALL' : 'PUT';
             barrier = undefined;
         } else if (activeTab === 'Matches/Differs') {
-            contract_type = 'DIGITDIFF';
+            contract_type = matchesDiffersType === 'Matches' ? 'DIGITMATCH' : 'DIGITDIFF';
             barrier = selectedDigit.toString();
         }
 
         return {
-            amount: stake,
+            amount: Number(stake),
             basis: 'stake',
             contract_type,
             currency: client.currency,
@@ -303,20 +325,29 @@ const QuickStrategy = observer(() => {
 
     const handleRun = async () => {
         if (!client.is_logged_in) { alert('Please login first'); return; }
+        if (isRunning) return;
         setIsRunning(true);
-        const params = getTradeParams();
+
         try {
             if (mode === 'Normal') {
-                const res = await trading_logic.placeTrade(params);
-                processTradeResult(res);
-                const newCount = currentRunCount + 1;
-                setCurrentRunCount(newCount);
-                if (newCount >= runsBeforeCountdown) {
-                    setIsCountingDown(true);
-                    setRemainingCountdown(countdownTime);
-                    setCurrentRunCount(0);
+                let currentRunCountLocal = currentRunCount;
+                while (isRunningRef.current && modeRef.current === 'Normal') {
+                    const params = getTradeParams();
+                    const res = await trading_logic.placeTrade(params);
+                    processTradeResult(res);
+
+                    currentRunCountLocal++;
+                    setCurrentRunCount(currentRunCountLocal);
+
+                    if (currentRunCountLocal >= runsBeforeCountdown) {
+                        setIsCountingDown(true);
+                        setRemainingCountdown(countdownTime);
+                        setCurrentRunCount(0);
+                        break; // Stop loop, the timer effect will restart handleRun when done
+                    }
                 }
             } else if (mode === 'Bulk') {
+                const params = getTradeParams();
                 const results = await trading_logic.placeBulkTrades(params, bulkCount);
                 results.forEach(processTradeResult);
                 setIsRunning(false);
@@ -349,12 +380,22 @@ const QuickStrategy = observer(() => {
     }, [isCountingDown, remainingCountdown]);
 
     // ── Flash mode trade on every tick ───────────────────────────────────────
+    // Track flash trading state to prevent overlap
+    const isFlashTradingRef = useRef(false);
+
     useEffect(() => {
-        if (isRunning && mode === 'Flash' && currentPrice !== null) {
+        if (isRunning && mode === 'Flash' && currentPrice !== null && !isFlashTradingRef.current) {
+            isFlashTradingRef.current = true;
             const params = getTradeParams();
-            trading_logic.placeTrade(params).then(processTradeResult).catch(console.error);
+            trading_logic.placeTrade(params).then(res => {
+                processTradeResult(res);
+                isFlashTradingRef.current = false;
+            }).catch(err => {
+                console.error(err);
+                isFlashTradingRef.current = false;
+            });
         }
-    }, [currentPrice]);
+    }, [currentPrice, isRunning, mode]);
 
     const TABS = ['Over/Under', 'Even/Odd', 'Rise/Fall', 'Matches/Differs'];
 
@@ -380,18 +421,51 @@ const QuickStrategy = observer(() => {
 
                 <div className='qs-header-right'>
                     {/* Digit Selection UI */}
-                    {(activeTab === 'Over/Under' || activeTab === 'Matches/Differs') && (
-                        <div className='qs-digit-selector'>
-                            {activeTab === 'Over/Under' && (
-                                <select
-                                    className='qs-native-select short'
-                                    value={digitType}
-                                    onChange={(e) => setDigitType(e.target.value)}
-                                >
-                                    <option value='Over'>Over</option>
-                                    <option value='Under'>Under</option>
-                                </select>
-                            )}
+                    <div className='qs-digit-selector'>
+                        {/* Tab-Specific Selectors */}
+                        {activeTab === 'Over/Under' && (
+                            <select
+                                className='qs-native-select short'
+                                value={digitType}
+                                onChange={(e) => setDigitType(e.target.value)}
+                            >
+                                <option value='Over'>Over</option>
+                                <option value='Under'>Under</option>
+                            </select>
+                        )}
+                        {activeTab === 'Even/Odd' && (
+                            <select
+                                className='qs-native-select short'
+                                value={evenOddType}
+                                onChange={(e) => setEvenOddType(e.target.value)}
+                            >
+                                <option value='Even'>Even</option>
+                                <option value='Odd'>Odd</option>
+                            </select>
+                        )}
+                        {activeTab === 'Rise/Fall' && (
+                            <select
+                                className='qs-native-select short'
+                                value={riseFallType}
+                                onChange={(e) => setRiseFallType(e.target.value)}
+                            >
+                                <option value='Rise'>Rise</option>
+                                <option value='Fall'>Fall</option>
+                            </select>
+                        )}
+                        {activeTab === 'Matches/Differs' && (
+                            <select
+                                className='qs-native-select short'
+                                value={matchesDiffersType}
+                                onChange={(e) => setMatchesDiffersType(e.target.value)}
+                            >
+                                <option value='Matches'>Matches</option>
+                                <option value='Differs'>Differs</option>
+                            </select>
+                        )}
+
+                        {/* Number Selector for Digit Trades */}
+                        {(activeTab === 'Over/Under' || activeTab === 'Matches/Differs') && (
                             <select
                                 className='qs-native-select short'
                                 value={selectedDigit}
@@ -401,8 +475,8 @@ const QuickStrategy = observer(() => {
                                     <option key={d} value={d}>{d}</option>
                                 ))}
                             </select>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
                     {/* Market selector */}
                     <div className='qs-selector-wrap'>

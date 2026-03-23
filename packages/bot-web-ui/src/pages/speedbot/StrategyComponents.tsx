@@ -350,6 +350,7 @@ export const TransactionTable = observer(({ trades }: { trades: any[] }) => {
                             <th>DETAILS</th>
                             <th>STAKE</th>
                             <th>RESULT</th>
+                            <th>PROFIT</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -361,12 +362,18 @@ export const TransactionTable = observer(({ trades }: { trades: any[] }) => {
                             trades.map((trade, index) => {
                                 const statusClass = trade.status === 'won' ? 'result-won' :
                                     trade.status === 'lost' ? 'result-lost' : 'result-pending';
+
+                                const profit = Number(trade.profit) || 0;
+                                const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
+                                const profitSign = profit >= 0 ? '+' : '';
+
                                 return (
                                     <tr key={index}>
                                         <td>{new Date().toLocaleTimeString()}</td>
                                         <td>{trade.contract_type}</td>
                                         <td>{formatMoney('USD', trade.buy_price, true)}</td>
                                         <td className={statusClass}>{trade.status?.toUpperCase()}</td>
+                                        <td className={profitClass}>{profitSign}{formatMoney('USD', profit, true)}</td>
                                     </tr>
                                 );
                             })
