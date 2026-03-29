@@ -1,4 +1,4 @@
 import QuickStrategy from './QuickStrategy';
-import './quick-strategy.scss';
+export { speedBotEngine } from './SpeedBotEngine';
 
 export default QuickStrategy;

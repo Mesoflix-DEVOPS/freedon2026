@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Text, Input, Button } from '@deriv/components';
 import { Localize } from '@deriv/translations';
 import { observer } from 'mobx-react-lite';
-import { MdSettings, MdTrendingUp, MdHistory } from 'react-icons/md';
+import { MdSettings, MdTrendingUp, MdHistory, MdRefresh } from 'react-icons/md';
 import { FaBolt, FaLayerGroup, FaChevronUp, FaChevronDown } from 'react-icons/fa';
 import { formatMoney } from '@deriv/shared';
+import type { SpeedBotConfig, DigitStats } from './types';
 
 // ─── Digit Analysis (Circles) ────────────────────────────────────────────────
 export const AnalysisHeader = observer(({ digit_counts, last_digit }: { digit_counts: number[], last_digit: number | null }) => {
@@ -76,7 +77,7 @@ export const AnalysisHeader = observer(({ digit_counts, last_digit }: { digit_co
     );
 });
 
-// ─── Even/Odd Analysis ───────────────────────────────────────────────────────
+// ─── Even/Odd Analysis (Kept for compatibility, though engine focus is digits)
 export const EvenOddAnalysis = observer(({
     digit_counts,
     tick_history_digits,
@@ -90,7 +91,6 @@ export const EvenOddAnalysis = observer(({
     const evenPercent = ((evenCount / total) * 100).toFixed(1);
     const oddPercent = ((oddCount / total) * 100).toFixed(1);
 
-    // last 20 ticks — determine E or O from digit
     const last20 = tick_history_digits ? tick_history_digits.slice(-20) : [];
 
     return (
@@ -100,7 +100,6 @@ export const EvenOddAnalysis = observer(({
                 <span>Even / Odd Analysis</span>
             </div>
 
-            {/* Pill badges */}
             {last20.length > 0 && (
                 <div className='qs-tick-pills'>
                     {last20.map((digit, i) => {
@@ -110,7 +109,6 @@ export const EvenOddAnalysis = observer(({
                             <div
                                 key={i}
                                 className={`qs-tick-pill ${isEven ? 'pill-even' : 'pill-odd'} ${isLatest ? 'pill-latest' : ''}`}
-                                title={`Digit: ${digit}`}
                             >
                                 {isEven ? 'E' : 'O'}
                                 {isLatest && <span className='pill-latest-label'>LATEST</span>}
@@ -120,7 +118,6 @@ export const EvenOddAnalysis = observer(({
                 </div>
             )}
 
-            {/* Dual bars */}
             <div className='qs-dual-bars'>
                 <div className='qs-bar-col'>
                     <div className='qs-bar-meta'>
@@ -147,7 +144,7 @@ export const EvenOddAnalysis = observer(({
     );
 });
 
-// ─── Rise/Fall Analysis ──────────────────────────────────────────────────────
+// ─── Rise/Fall Analysis ──────
 export const RiseFallAnalysis = observer(({
     rise_fall_stats,
     tick_directions,
@@ -168,7 +165,6 @@ export const RiseFallAnalysis = observer(({
                 <span>Rise / Fall Analysis</span>
             </div>
 
-            {/* Pill badges */}
             {last20.length > 0 && (
                 <div className='qs-tick-pills'>
                     {last20.map((dir, i) => {
@@ -186,7 +182,6 @@ export const RiseFallAnalysis = observer(({
                 </div>
             )}
 
-            {/* Dual bars */}
             <div className='qs-dual-bars'>
                 <div className='qs-bar-col'>
                     <div className='qs-bar-meta'>
@@ -215,23 +210,15 @@ export const RiseFallAnalysis = observer(({
 
 // ─── Configuration Panel ─────────────────────────────────────────────────────
 export const ConfigurationPanel = observer(({
-    stake,
-    setStake,
-    mode,
-    setMode,
-    stopLoss,
-    setStopLoss,
-    takeProfit,
-    setTakeProfit,
-    runsBeforeCountdown,
-    setRunsBeforeCountdown,
-    countdownTime,
-    setCountdownTime,
-    bulkCount,
-    setBulkCount,
+    config,
+    updateConfig,
     isOpen,
     onToggle,
+    isRunning,
+    onResetSession,
 }: any) => {
+    if (!config) return null;
+
     return (
         <div className={`qs-config-panel ${isOpen ? 'open' : 'closed'}`}>
             <div className='qs-config-header' onClick={onToggle}>
@@ -239,34 +226,44 @@ export const ConfigurationPanel = observer(({
                     <MdSettings style={{ fontSize: 20, color: 'var(--primary-color)' }} />
                     <span className='qs-cfg-title'>Strategy</span>
                 </div>
-                {isOpen ? <FaChevronUp /> : <FaChevronDown />}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                     <button 
+                        className='qs-reset-btn' 
+                        onClick={(e) => { e.stopPropagation(); onResetSession(); }}
+                        title='Reset Session Stats'
+                    >
+                        <MdRefresh />
+                    </button>
+                    {isOpen ? <FaChevronUp /> : <FaChevronDown />}
+                </div>
             </div>
 
             {isOpen && (
                 <div className='qs-config-content'>
                     <div className='qs-config-section'>
-                        {/* Trading Mode */}
                         <div className='qs-config-item'>
                             <label>TRADING MODE</label>
                             <select
                                 className='qs-mode-select'
-                                value={mode}
-                                onChange={(e) => setMode(e.target.value)}
+                                value={config.mode}
+                                onChange={(e) => updateConfig({ mode: e.target.value as any })}
+                                disabled={isRunning}
                             >
-                                <option value='Normal'>Normal Mode</option>
-                                <option value='Bulk'>Bulk Mode</option>
-                                <option value='Flash'>Flash Mode (Every Tick)</option>
+                                <option value='NORMAL'>Normal Mode</option>
+                                <option value='BULK'>Bulk Mode</option>
+                                <option value='FLASH'>Flash Mode (Every Tick)</option>
                             </select>
                         </div>
 
-                        {mode === 'Bulk' && (
+                        {config.mode === 'BULK' && (
                             <div className='qs-config-item'>
                                 <label>BULK TRADES COUNT</label>
                                 <input
                                     className='qs-input'
                                     type='number'
-                                    value={bulkCount}
-                                    onChange={(e: any) => setBulkCount(e.target.value)}
+                                    value={config.bulkCount}
+                                    onChange={(e: any) => updateConfig({ bulkCount: Number(e.target.value) })}
+                                    disabled={isRunning}
                                 />
                             </div>
                         )}
@@ -277,8 +274,19 @@ export const ConfigurationPanel = observer(({
                                 <input
                                     className='qs-input'
                                     type='number'
-                                    value={stake}
-                                    onChange={(e: any) => setStake(e.target.value)}
+                                    value={config.stake}
+                                    onChange={(e: any) => updateConfig({ stake: Number(e.target.value) })}
+                                    disabled={isRunning}
+                                />
+                            </div>
+                            <div className='qs-config-item'>
+                                <label>MAX TRADES</label>
+                                <input
+                                    className='qs-input'
+                                    type='number'
+                                    value={config.maxTrades}
+                                    onChange={(e: any) => updateConfig({ maxTrades: Number(e.target.value) })}
+                                    disabled={isRunning}
                                 />
                             </div>
                             <div className='qs-config-item'>
@@ -286,8 +294,9 @@ export const ConfigurationPanel = observer(({
                                 <input
                                     className='qs-input'
                                     type='number'
-                                    value={stopLoss}
-                                    onChange={(e: any) => setStopLoss(e.target.value)}
+                                    value={config.stopLoss}
+                                    onChange={(e: any) => updateConfig({ stopLoss: Number(e.target.value) })}
+                                    disabled={isRunning}
                                 />
                             </div>
                             <div className='qs-config-item'>
@@ -295,36 +304,10 @@ export const ConfigurationPanel = observer(({
                                 <input
                                     className='qs-input'
                                     type='number'
-                                    value={takeProfit}
-                                    onChange={(e: any) => setTakeProfit(e.target.value)}
+                                    value={config.takeProfit}
+                                    onChange={(e: any) => updateConfig({ takeProfit: Number(e.target.value) })}
+                                    disabled={isRunning}
                                 />
-                            </div>
-                        </div>
-
-                        <div className='qs-config-divider' />
-
-                        <div className='qs-config-grid'>
-                            <div className='qs-config-item'>
-                                <label>RUNS BEFORE COUNTDOWN</label>
-                                <input
-                                    className='qs-input'
-                                    type='number'
-                                    value={runsBeforeCountdown}
-                                    onChange={(e: any) => setRunsBeforeCountdown(e.target.value)}
-                                />
-                            </div>
-                            <div className='qs-config-item'>
-                                <label>COUNTDOWN (SEC)</label>
-                                <select
-                                    className='qs-mode-select'
-                                    value={countdownTime}
-                                    onChange={(e: any) => setCountdownTime(Number(e.target.value))}
-                                >
-                                    <option value={30}>30 Seconds</option>
-                                    <option value={60}>1 Minute</option>
-                                    <option value={120}>2 Minutes</option>
-                                    <option value={300}>5 Minutes</option>
-                                </select>
                             </div>
                         </div>
                     </div>
@@ -340,39 +323,43 @@ export const TransactionTable = observer(({ trades }: { trades: any[] }) => {
         <div className='qs-transaction-table'>
             <div className='qs-table-header'>
                 <MdHistory className='qs-icon' />
-                <span>SpeedBot Engine</span>
+                <span>SpeedBot Engine History</span>
             </div>
             <div className='qs-table-container'>
                 <table>
                     <thead>
                         <tr>
                             <th>TIME</th>
-                            <th>DETAILS</th>
+                            <th>SYMBOL</th>
+                            <th>TYPE</th>
                             <th>STAKE</th>
-                            <th>RESULT</th>
+                            <th>STATUS</th>
                             <th>PROFIT</th>
                         </tr>
                     </thead>
                     <tbody>
                         {trades.length === 0 ? (
                             <tr>
-                                <td colSpan={5} className='qs-empty-row'>No history yet</td>
+                                <td colSpan={6} className='qs-empty-row'>No history found for this session</td>
                             </tr>
                         ) : (
                             trades.map((trade, index) => {
-                                const statusClass = trade.status === 'won' ? 'result-won' :
-                                    trade.status === 'lost' ? 'result-lost' : 'result-pending';
-
                                 const profit = Number(trade.profit) || 0;
-                                const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
-                                const profitSign = profit >= 0 ? '+' : '';
+                                const statusClass = profit > 0 ? 'result-won' :
+                                    profit < 0 ? 'result-lost' : 'result-pending';
+
+                                const profitClass = profit > 0 ? 'profit-positive' : profit < 0 ? 'profit-negative' : '';
+                                const profitSign = profit > 0 ? '+' : '';
 
                                 return (
                                     <tr key={index}>
-                                        <td>{new Date().toLocaleTimeString()}</td>
-                                        <td>{trade.contract_type}</td>
-                                        <td>{formatMoney('USD', trade.buy_price, true)}</td>
-                                        <td className={statusClass}>{trade.status?.toUpperCase()}</td>
+                                        <td>{new Date(trade.timestamp).toLocaleTimeString()}</td>
+                                        <td>{trade.symbol?.replace('R_', 'V')}</td>
+                                        <td>{trade.tradeType}</td>
+                                        <td>{formatMoney('USD', trade.stake || trade.buy_price, true)}</td>
+                                        <td className={statusClass}>
+                                            {profit > 0 ? 'WON' : profit < 0 ? 'LOST' : 'SOLD'}
+                                        </td>
                                         <td className={profitClass}>{profitSign}{formatMoney('USD', profit, true)}</td>
                                     </tr>
                                 );
